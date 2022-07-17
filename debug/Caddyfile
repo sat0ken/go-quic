@@ -1,0 +1,24 @@
+{
+    debug
+    http_port 18080
+    https_port 18443
+    auto_https ignore_loaded_certs
+    servers {
+        protocol {
+            experimental_http3
+            strict_sni_host insecure_off
+        }
+    }
+    pki {
+        ca {
+            root {
+                cert ./my-tls.pem
+                key ./my-tls-key.pem
+            }
+        }
+    }
+}
+
+localhost {
+    respond "hello"
+}

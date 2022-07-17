@@ -4,7 +4,7 @@ import (
 	"crypto/tls"
 )
 
-func (*ClientHello) NewQuicClientHello(sourceConnID []byte) (TLSInfo, []byte) {
+func (*ClientHello) NewQuicClientHello(sourceConnID, hostname []byte) (TLSInfo, []byte) {
 	var tlsinfo TLSInfo
 	handshake := ClientHello{
 		HandshakeType:      []byte{HandshakeTypeClientHello},
@@ -12,28 +12,28 @@ func (*ClientHello) NewQuicClientHello(sourceConnID []byte) (TLSInfo, []byte) {
 		Version:            TLS1_2,
 		Random:             noRandomByte(32),
 		SessionIDLength:    []byte{0x00},
-		CipherSuitesLength: []byte{0x00, 0x26},
-		// TLS_CHACHA20_POLY1305_SHA256
-		//CipherSuites: []byte{0x13, 0x03},
+		CipherSuitesLength: []byte{0x00, 0x06},
 		// TLS_RSA_WITH_AES_128_GCM_SHA256
-		// 19 suites
-		CipherSuites: []byte{
-			0xc0, 0x2b, 0xc0, 0x2f, 0xc0, 0x2c, 0xc0, 0x30,
-			0xcc, 0xa9, 0xcc, 0xa8, 0xc0, 0x09, 0xc0, 0x13,
-			0xc0, 0x0a, 0xc0, 0x14, 0x00, 0x9c, 0x00, 0x9d,
-			0x00, 0x2f, 0x00, 0x35, 0xc0, 0x12, 0x00, 0x0a,
-			0x13, 0x01, 0x13, 0x02, 0x13, 0x03,
-		},
-		// ECDHE-RSA-AES128-GCM-SHA256
-		//CipherSuites:      []byte{0xC0, 0x2F},
+		// TLS_RSA_WITH_AES_128_GCM_SHA384
+		// TLS_CHACHA20_POLY1305_SHA256
+		CipherSuites: []byte{0x13, 0x01, 0x13, 0x02, 0x13, 0x03},
+
+		//CipherSuitesLength: []byte{0x00, 0x26},
+		//CipherSuites: []byte{
+		//	0xc0, 0x2b, 0xc0, 0x2f, 0xc0, 0x2c, 0xc0, 0x30,
+		//	0xcc, 0xa9, 0xcc, 0xa8, 0xc0, 0x09, 0xc0, 0x13,
+		//	0xc0, 0x0a, 0xc0, 0x14, 0x00, 0x9c, 0x00, 0x9d,
+		//	0x00, 0x2f, 0x00, 0x35, 0xc0, 0x12, 0x00, 0x0a,
+		//	0x13, 0x01, 0x13, 0x02, 0x13, 0x03,
+		//},
 		CompressionLength: []byte{0x01},
 		CompressionMethod: []byte{0x00},
 	}
 
 	// TLS1.3のextensionをセット
-	handshake.Extensions, tlsinfo.ECDHEKeys = setQuicTLSExtension()
+	handshake.Extensions, tlsinfo.ECDHEKeys = setQuicTLSExtension(hostname)
 	// Quic transport parameterを追加
-	handshake.Extensions = append(handshake.Extensions, setQuicTransportParameters(sourceConnID)...)
+	handshake.Extensions = append(handshake.Extensions, setQuicTransportParameters()...)
 	// ExtensionLengthをセット
 	handshake.ExtensionLength = UintTo2byte(uint16(len(handshake.Extensions)))
 
@@ -53,7 +53,7 @@ func (*ClientHello) NewQuicClientHello(sourceConnID []byte) (TLSInfo, []byte) {
 }
 
 // quic-goが送っていたのをセットする
-func setQuicTransportParameters(sourceConnID []byte) []byte {
+func setQuicTransportParameters() []byte {
 	var quicParams []byte
 	var quicParamsBytes []byte
 
@@ -73,9 +73,9 @@ func setQuicTransportParameters(sourceConnID []byte) []byte {
 	quicParams = append(quicParams, activeConnectionIdLimit...)
 
 	// Set source connection id Length
-	initialSourceConnectionId = append(initialSourceConnectionId, byte(len(sourceConnID)))
+	//initialSourceConnectionId = append(initialSourceConnectionId, byte(len(sourceConnID)))
 	// Set source connection id
-	initialSourceConnectionId = append(initialSourceConnectionId, sourceConnID...)
+	//initialSourceConnectionId = append(initialSourceConnectionId, sourceConnID...)
 
 	quicParams = append(quicParams, initialSourceConnectionId...)
 	quicParams = append(quicParams, maxDatagramFrameSize...)
@@ -90,14 +90,11 @@ func setQuicTransportParameters(sourceConnID []byte) []byte {
 }
 
 // golangのclientのをキャプチャしてそのままセットする
-func setQuicTLSExtension() ([]byte, ECDHEKeys) {
+func setQuicTLSExtension(hostname []byte) ([]byte, ECDHEKeys) {
 	var tlsExtension []byte
 
 	// server_name
-	//tlsExtension = append(tlsExtension, []byte{
-	//	0x00, 0x00, 0x00, 0x0f, 0x00, 0x0d, 0x00, 0x00,
-	//	0x0a, 0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65, 0x2e,
-	//	0x63, 0x6f, 0x6d}...)
+	tlsExtension = append(tlsExtension, makeServerNameExt(hostname)...)
 
 	//　status_reqeust
 	tlsExtension = append(tlsExtension, []byte{0x00, 0x05, 0x00, 0x05, 0x01, 0x00, 0x00, 0x00, 0x00}...)
@@ -140,8 +137,8 @@ func setQuicTLSExtension() ([]byte, ECDHEKeys) {
 	// keyのLength = 32byte
 	tlsExtension = append(tlsExtension, []byte{0x00, 0x20}...)
 	// 公開鍵を追加
-	//tlsExtension = append(tlsExtension, clientkey.PublicKey...)
-	tlsExtension = append(tlsExtension, strtoByte("2fe57da347cd62431528daac5fbb290730fff684afc4cfc2ed90995f58cb3b74")...)
+	tlsExtension = append(tlsExtension, clientkey.PublicKey...)
+	//tlsExtension = append(tlsExtension, strtoByte("2fe57da347cd62431528daac5fbb290730fff684afc4cfc2ed90995f58cb3b74")...)
 
 	// set length
 	//tlsExtensionByte = append(tlsExtensionByte, UintTo2byte(uint16(len(tlsExtension)))...)
@@ -188,4 +185,21 @@ func ParseQuicTLSHandshake(packet []byte) interface{} {
 	}
 
 	return i
+}
+
+func makeServerNameExt(hostname []byte) []byte {
+	sname := ServerNameIndicationExtension{
+		ServerNameListLength: UintTo2byte(uint16(len(hostname) + 3)),
+		ServerNameType:       []byte{0x00},
+		ServerNameLength:     UintTo2byte(uint16(len(hostname))),
+		ServerName:           hostname,
+	}
+
+	// type
+	extbyte := []byte{0x00, 0x00}
+	// set packet length
+	extbyte = append(extbyte, UintTo2byte(toByteLen(sname))...)
+	extbyte = append(extbyte, toByteArr(sname)...)
+
+	return extbyte
 }

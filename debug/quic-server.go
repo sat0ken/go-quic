@@ -7,10 +7,19 @@ import (
 	"io"
 	"log"
 	"os"
-	"tcpip/debug/utils"
 )
 
 const addr = "localhost:18443"
+
+type zeroSource struct{}
+
+func (zeroSource) Read(b []byte) (n int, err error) {
+	for i := range b {
+		b[i] = 0
+	}
+
+	return len(b), nil
+}
 
 type loggingWriter struct{ io.Writer }
 
@@ -24,7 +33,7 @@ func main() {
 	}
 
 	listener, err := quic.ListenAddr(addr, &tls.Config{
-		Rand:         utils.ZeroSource{},
+		Rand:         zeroSource{},
 		Certificates: []tls.Certificate{tlsCert},
 		MinVersion:   tls.VersionTLS13,
 		MaxVersion:   tls.VersionTLS13,

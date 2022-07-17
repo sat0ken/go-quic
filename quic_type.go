@@ -34,7 +34,7 @@ var maxIdleTimeout = []byte{0x01, 0x04, 0x80, 0x00, 0x75, 0x30}
 var maxUdpPayloadSize = []byte{0x03, 0x02, 0x45, 0xac}
 var disableActiveMigration = []byte{0x0c, 0x00}
 var activeConnectionIdLimit = []byte{0x0e, 0x01, 0x04}
-var initialSourceConnectionId = []byte{0x0f}
+var initialSourceConnectionId = []byte{0x0f, 0x00}
 var maxDatagramFrameSize = []byte{0x20, 0x01, 0x00}
 
 type QuicKeyBlock struct {
@@ -51,7 +51,7 @@ type QuicRawPacket struct {
 	QuicFrames []interface{}
 }
 
-type QuicLongCommonHeader struct {
+type QuicLongHeader struct {
 	HeaderByte         []byte
 	Version            []byte
 	DestConnIDLength   []byte

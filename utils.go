@@ -117,8 +117,7 @@ func strtoByte(str string) []byte {
 }
 
 func StrtoByte(str string) []byte {
-	b, _ := hex.DecodeString(str)
-	return b
+	return strtoByte(str)
 }
 
 func WriteHash(message []byte) []byte {
@@ -129,9 +128,9 @@ func WriteHash(message []byte) []byte {
 }
 
 // zeroSource is an io.Reader that returns an unlimited number of zero bytes.
-type zeroSource struct{}
+type ZeroSource struct{}
 
-func (zeroSource) Read(b []byte) (n int, err error) {
+func (ZeroSource) Read(b []byte) (n int, err error) {
 	for i := range b {
 		b[i] = 0
 	}
@@ -153,7 +152,7 @@ func AddPaddingFrame(data []byte, to int) []byte {
 	for i := 0; i <= to; i++ {
 		extend = append(extend, 0x00)
 	}
-	data = append(data, extend...)
-	//extend = append(extend, data...)
+	//data = append(data, extend...)
+	extend = append(extend, data...)
 	return extend
 }

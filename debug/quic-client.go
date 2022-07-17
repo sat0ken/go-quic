@@ -9,15 +9,24 @@ import (
 	"io"
 	"log"
 	"os"
-	"tcpip/debug/utils"
 )
+
+type zeroSource2 struct{}
+
+func (zeroSource2) Read(b []byte) (n int, err error) {
+	for i := range b {
+		b[i] = 0
+	}
+
+	return len(b), nil
+}
 
 func main() {
 	w := os.Stdout
 	tlsConf := &tls.Config{
 		MinVersion:   tls.VersionTLS13,
 		MaxVersion:   tls.VersionTLS13,
-		Rand:         utils.ZeroSource{},
+		Rand:         zeroSource2{},
 		NextProtos:   []string{"quic-echo-example"},
 		KeyLogWriter: w,
 	}

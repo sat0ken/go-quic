@@ -240,3 +240,10 @@ type SessionTicket struct {
 	TicketExtensionLength []byte
 	TicketExtensions      []byte
 }
+
+type ServerNameIndicationExtension struct {
+	ServerNameListLength []byte
+	ServerNameType       []byte
+	ServerNameLength     []byte
+	ServerName           []byte
+}

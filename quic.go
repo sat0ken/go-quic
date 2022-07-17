@@ -35,7 +35,7 @@ func ParseRawQuicPacket(packet []byte, protected bool) (rawpacket QuicRawPacket)
 	switch p0[2:4] {
 	// Initial Packet
 	case "00":
-		commonHeader := QuicLongCommonHeader{
+		commonHeader := QuicLongHeader{
 			HeaderByte:       packet[0:1],
 			Version:          packet[1:5],
 			DestConnIDLength: packet[5:6],
@@ -106,7 +106,7 @@ func ParseRawQuicPacket(packet []byte, protected bool) (rawpacket QuicRawPacket)
 	case "10":
 		fmt.Println("Handshake Packet")
 	case "11":
-		commonHeader := QuicLongCommonHeader{
+		commonHeader := QuicLongHeader{
 			HeaderByte: packet[0:1],
 			Version:    packet[1:5],
 		}
@@ -135,7 +135,7 @@ func ParseRawQuicPacket(packet []byte, protected bool) (rawpacket QuicRawPacket)
 }
 
 // ヘッダ保護を解除したパケットにする
-func QuicPacketToUnprotect(commonHeader QuicLongCommonHeader, initpacket InitialPacket, packet, hpkey []byte) []byte {
+func QuicPacketToUnprotect(commonHeader QuicLongHeader, initpacket InitialPacket, packet, hpkey []byte) QuicRawPacket {
 	// https://tex2e.github.io/blog/protocol/quic-initial-packet-decrypt
 	// 5.4.2. ヘッダー保護のサンプル
 	pnOffset := 7 + len(commonHeader.DestConnID) + len(commonHeader.SourceConnID) + len(initpacket.Length)
@@ -164,7 +164,8 @@ func QuicPacketToUnprotect(commonHeader QuicLongCommonHeader, initpacket Initial
 	for i, _ := range a {
 		packet[pnOffset+i] = a[i]
 	}
-	return packet
+
+	return ParseRawQuicPacket(packet, false)
 }
 
 func QuicHeaderToProtect(header, sample, hp []byte) []byte {
@@ -195,14 +196,17 @@ func QuicHeaderToProtect(header, sample, hp []byte) []byte {
 
 func DecryptQuicPayload(packetNumber, header, payload []byte, keyblock QuicKeyBlock) []byte {
 	// パケット番号で8byteのnonceにする
-	packetnum := extendArrByZero(packetNumber, 8)
+	packetnum := extendArrByZero(packetNumber, len(keyblock.ClientIV))
 
-	block, _ := aes.NewCipher(keyblock.ServerKey)
+	block, _ := aes.NewCipher(keyblock.ClientKey)
 	aesgcm, _ := cipher.NewGCM(block)
 	// IVとxorしたのをnonceにする
-	nonce := getXORNonce(packetnum, keyblock.ServerIV)
+	//nonce := getXORNonce(packetnum, keyblock.ClientIV)
+	for i, _ := range packetnum {
+		packetnum[i] ^= keyblock.ClientIV[i]
+	}
 	// 復号する
-	plaintext, err := aesgcm.Open(nil, nonce, payload, header)
+	plaintext, err := aesgcm.Open(nil, packetnum, payload, header)
 	if err != nil {
 		log.Fatalf("DecryptQuicPayload is error : %v\n", err)
 	}
@@ -250,7 +254,7 @@ func ParseQuicFrame(packet []byte) (frames interface{}) {
 	return frames
 }
 
-func NewQuicLongHeader(destConnID, sourceConnID []byte, pnum, pnumlen uint) QuicRawPacket {
+func NewQuicLongHeader(destConnID, sourceConnID []byte, pnum, pnumlen uint) (QuicLongHeader, InitialPacket) {
 	// とりあえず2byte
 	var packetNum []byte
 	if pnumlen == 2 {
@@ -276,23 +280,23 @@ func NewQuicLongHeader(destConnID, sourceConnID []byte, pnum, pnumlen uint) Quic
 		firstByte = 0xC3
 	}
 	// Headerを作る
-	commonHeader := QuicLongCommonHeader{
-		HeaderByte:         []byte{firstByte},
-		Version:            []byte{0x00, 0x00, 0x00, 0x01},
-		DestConnIDLength:   []byte{byte(len(destConnID))},
-		DestConnID:         destConnID,
-		SourceConnIDLength: []byte{byte(len(sourceConnID))},
-		SourceConnID:       sourceConnID,
+	commonHeader := QuicLongHeader{
+		HeaderByte:       []byte{firstByte},
+		Version:          []byte{0x00, 0x00, 0x00, 0x01},
+		DestConnIDLength: []byte{byte(len(destConnID))},
+		DestConnID:       destConnID,
+	}
+	// source connectio id をセット
+	if sourceConnID == nil {
+		commonHeader.SourceConnIDLength = []byte{0x00}
+	} else {
+		commonHeader.SourceConnIDLength = []byte{byte(len(sourceConnID))}
+		commonHeader.SourceConnID = sourceConnID
 	}
 
-	return QuicRawPacket{
-		QuicHeader: commonHeader,
-		QuicFrames: []interface{}{
-			InitialPacket{
-				TokenLength:  []byte{0x00},
-				PacketNumber: packetNum,
-			},
-		},
+	return commonHeader, InitialPacket{
+		TokenLength:  []byte{0x00},
+		PacketNumber: packetNum,
 	}
 }
 
@@ -337,16 +341,16 @@ func NewQuicCryptoFrame(data []byte) QuicCryptoFrame {
 	}
 }
 
-func SendQuicPacket(data []byte, udpinfo UDPInfo) QuicRawPacket {
+func SendQuicPacket(data []byte, server []byte, port int) QuicRawPacket {
 	var packet QuicRawPacket
 	recvBuf := make([]byte, 1500)
 
-	server := net.UDPAddr{
-		IP:   udpinfo.ServerAddr,
-		Port: udpinfo.ServerPort,
+	serverinfo := net.UDPAddr{
+		IP:   server,
+		Port: port,
 	}
 
-	conn, err := net.DialUDP("udp", nil, &server)
+	conn, err := net.DialUDP("udp", nil, &serverinfo)
 	if err != nil {
 		log.Fatalf("Can't UDP data to server : %v", err)
 	}
