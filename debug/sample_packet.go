@@ -48,19 +48,19 @@ func samplePacketProtect() {
 	headerByte = append(headerByte, initPacket.PacketNumber...)
 
 	fmt.Printf("header is %x\n", headerByte)
-	//fmt.Printf("Payload is %x\n", initPacket.Payload)
-	//add := tcpip.StrtoByte("c300000001088394c8f03e5157080000449e00000002")
+	// payloadを暗号化
 	enctext := quic.EncryptQuicPayload(initPacket.PacketNumber, headerByte, initPacket.Payload, keyblock)
-	fmt.Printf("enctext is %x\n", enctext[0:16])
-	//
-	//protectHeader := quic.ProtectHeader(header, initPacket, enctext, keyblock.ClientHeaderProtection)
-	protectHeader := quic.QuicHeaderToProtect(headerByte, enctext[0:16], keyblock.ClientHeaderProtection)
-	fmt.Printf("protected header is %x\n", protectHeader)
-	// ヘッダとデータで送信するパケットを生成
-	packet := protectHeader
+
+	packet := headerByte
 	packet = append(packet, enctext...)
 
-	if bytes.Equal(packet, resultProtectedPacket) {
+	protectPacket := quic.ProtectHeader(header, initPacket, packet, keyblock.ClientHeaderProtection)
+	//fmt.Printf("protected header is %x\n", protectPacket)
+	// ヘッダとデータで送信するパケットを生成
+	//packet := protectHeader
+	//packet = append(packet, enctext...)
+
+	if bytes.Equal(protectPacket, resultProtectedPacket) {
 		fmt.Println("result is true")
 	}
 	//quic.SendQuicPacket(packet, []byte{127, 0, 0, 1}, 18443)

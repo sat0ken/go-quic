@@ -198,31 +198,31 @@ func ProtectHeader(commonHeader QuicLongHeader, initpacket InitialPacket, packet
 	return packet
 }
 
-func QuicHeaderToProtect(header, sample, hp []byte) []byte {
-	block, err := aes.NewCipher(hp)
-	if err != nil {
-		log.Fatalf("header protect error : %v\n", err)
-	}
-	mask := make([]byte, len(sample))
-	block.Encrypt(mask, sample)
-
-	// ヘッダの最初のバイトを保護
-	header[0] ^= mask[0] & 0x0f
-
-	// Packet Numberの0byte目がある場所
-	pnumStartOffset := len(header) - 4
-
-	a := header[pnumStartOffset : pnumStartOffset+4]
-	b := mask[1:5]
-	for i, _ := range a {
-		a[i] ^= b[i]
-	}
-	// パケット番号をセットして保護する
-	for i, _ := range a {
-		header[pnumStartOffset+i] = a[i]
-	}
-	return header
-}
+//func QuicHeaderToProtect(header, sample, hp []byte) []byte {
+//	block, err := aes.NewCipher(hp)
+//	if err != nil {
+//		log.Fatalf("header protect error : %v\n", err)
+//	}
+//	mask := make([]byte, len(sample))
+//	block.Encrypt(mask, sample)
+//
+//	// ヘッダの最初のバイトを保護
+//	header[0] ^= mask[0] & 0x0f
+//
+//	// Packet Numberの0byte目がある場所
+//	pnumStartOffset := len(header) - 4
+//
+//	a := header[pnumStartOffset : pnumStartOffset+4]
+//	b := mask[1:5]
+//	for i, _ := range a {
+//		a[i] ^= b[i]
+//	}
+//	// パケット番号をセットして保護する
+//	for i, _ := range a {
+//		header[pnumStartOffset+i] = a[i]
+//	}
+//	return header
+//}
 
 func DecryptQuicPayload(packetNumber, header, payload []byte, keyblock QuicKeyBlock) []byte {
 	// パケット番号で8byteのnonceにする
