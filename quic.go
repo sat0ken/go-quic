@@ -27,7 +27,7 @@ func CreateQuicInitialSecret(dstConnId []byte) QuicKeyBlock {
 }
 
 // QUICパケットをパースする
-func ParseRawQuicPacket(packet []byte, protected bool) (rawpacket QuicRawPacket) {
+func ParseRawQuicPacket(packet []byte, protected bool) (rawpacket interface{}) {
 
 	p0 := fmt.Sprintf("%08b", packet[0])
 	// LongHeader = 1 で始まる
@@ -57,9 +57,10 @@ func ParseRawQuicPacket(packet []byte, protected bool) (rawpacket QuicRawPacket)
 		}
 		//fmt.Printf("packet is %x\n", packet)
 
-		// 共通ヘッダの処理はここまで
+		// Longヘッダの処理はここまで
 		// ここからInitialパケットの処理
 		var initPacket InitialPacket
+		initPacket.LongHeader = commonHeader
 
 		// Token Lengthが0なら
 		if bytes.Equal(packet[0:1], []byte{0x00}) {
@@ -98,17 +99,16 @@ func ParseRawQuicPacket(packet []byte, protected bool) (rawpacket QuicRawPacket)
 			}
 		}
 
-		rawpacket = QuicRawPacket{
-			QuicHeader: commonHeader,
-			QuicFrames: []interface{}{initPacket},
-		}
+		rawpacket = initPacket
 
 	case "10":
 		fmt.Println("Handshake Packet")
+	// Retry Packet
 	case "11":
 		commonHeader := QuicLongHeader{
 			HeaderByte: packet[0:1],
 			Version:    packet[1:5],
+			//PacketType: LongPacketTypeRetry,
 		}
 		// Destination Connection Length と ID
 		if bytes.Equal(packet[5:6], []byte{0x00}) {
@@ -120,14 +120,10 @@ func ParseRawQuicPacket(packet []byte, protected bool) (rawpacket QuicRawPacket)
 		// packetを縮める
 		packet = packet[1+int(commonHeader.SourceConnID[0]):]
 
-		retryPacket := RetryPacket{
+		rawpacket = RetryPacket{
+			LongHeader:         commonHeader,
 			RetryToken:         packet[0 : len(packet)-16],
 			RetryIntergrityTag: packet[len(packet)-16:],
-		}
-		//fmt.Println("Parse Retry Packet, token is %x\n", retryPacket.RetryToken)
-		rawpacket = QuicRawPacket{
-			QuicHeader: commonHeader,
-			QuicFrames: []interface{}{retryPacket},
 		}
 	}
 
@@ -135,14 +131,14 @@ func ParseRawQuicPacket(packet []byte, protected bool) (rawpacket QuicRawPacket)
 }
 
 // ヘッダ保護を解除したパケットにする
-func QuicPacketToUnprotect(commonHeader QuicLongHeader, initpacket InitialPacket, packet, hpkey []byte) QuicRawPacket {
+func UnprotectHeader(commonHeader QuicLongHeader, initpacket InitialPacket, packet, hpkey []byte) interface{} {
 	// https://tex2e.github.io/blog/protocol/quic-initial-packet-decrypt
-	// 5.4.2. ヘッダー保護のサンプル
+	// RFC9001 5.4.2. ヘッダー保護のサンプル
 	pnOffset := 7 + len(commonHeader.DestConnID) + len(commonHeader.SourceConnID) + len(initpacket.Length)
 	pnOffset += len(initpacket.Token) + len(initpacket.TokenLength)
 	sampleOffset := pnOffset + 4
 
-	fmt.Printf("pnOffset is %d, sampleOffset is %d\n", pnOffset, sampleOffset)
+	//fmt.Printf("pnOffset is %d, sampleOffset is %d\n", pnOffset, sampleOffset)
 	block, err := aes.NewCipher(hpkey)
 	if err != nil {
 		log.Fatalf("header unprotect error : %v\n", err)
@@ -164,8 +160,41 @@ func QuicPacketToUnprotect(commonHeader QuicLongHeader, initpacket InitialPacket
 	for i, _ := range a {
 		packet[pnOffset+i] = a[i]
 	}
-
 	return ParseRawQuicPacket(packet, false)
+}
+
+// ヘッダ保護をしたパケットにする
+func ProtectHeader(commonHeader QuicLongHeader, initpacket InitialPacket, packet, hpkey []byte) []byte {
+	// RFC9001 5.4.2. ヘッダー保護のサンプル
+	pnOffset := 7 + len(commonHeader.DestConnID) + len(commonHeader.SourceConnID) + len(initpacket.Length)
+	pnOffset += len(initpacket.Token) + len(initpacket.TokenLength)
+	sampleOffset := pnOffset + 4
+
+	fmt.Printf("pnOffset is %d, sampleOffset is %d\n", pnOffset, sampleOffset)
+	block, err := aes.NewCipher(hpkey)
+	if err != nil {
+		log.Fatalf("protect header err : %v\n", err)
+	}
+	sample := packet[sampleOffset : sampleOffset+16]
+	fmt.Printf("sample is %x\n", sample)
+	encsample := make([]byte, len(sample))
+	block.Encrypt(encsample, sample)
+
+	// ヘッダ保護する前にパケット番号の長さを取得する
+	pnlength := (packet[0] & 0x03) + 1
+	// ヘッダの最初のバイトを保護
+	packet[0] ^= encsample[0] & 0x0f
+
+	a := packet[pnOffset : pnOffset+int(pnlength)]
+	b := encsample[1 : 1+pnlength]
+	for i, _ := range a {
+		a[i] ^= b[i]
+	}
+	// 保護したパケット番号をセットし直す
+	for i, _ := range a {
+		packet[pnOffset+i] = a[i]
+	}
+	return packet
 }
 
 func QuicHeaderToProtect(header, sample, hp []byte) []byte {
@@ -341,8 +370,8 @@ func NewQuicCryptoFrame(data []byte) FrameTypeCrypto {
 	}
 }
 
-func SendQuicPacket(data []byte, server []byte, port int) QuicRawPacket {
-	var packet QuicRawPacket
+func SendQuicPacket(data []byte, server []byte, port int) interface{} {
+	var packet interface{}
 	recvBuf := make([]byte, 1500)
 
 	serverinfo := net.UDPAddr{

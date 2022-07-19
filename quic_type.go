@@ -8,6 +8,13 @@ const (
 	HandShakeDone = 0x1e
 )
 
+const (
+	LongPacketTypeInitial = iota
+	LongPacketTypeORTT
+	LongPacketTypeHandshake
+	LongPacketTypeRetry
+)
+
 var initialSalt = []byte{
 	0x38, 0x76, 0x2c, 0xf7, 0xf5, 0x59, 0x34, 0xb3, 0x4d, 0x17,
 	0x9a, 0xe6, 0xa4, 0xc8, 0x0c, 0xad, 0xcc, 0xbb, 0x7f, 0x0a,
@@ -52,7 +59,8 @@ type QuicRawPacket struct {
 }
 
 type QuicLongHeader struct {
-	HeaderByte         []byte
+	HeaderByte []byte
+	//PacketType         int
 	Version            []byte
 	DestConnIDLength   []byte
 	DestConnID         []byte
@@ -69,7 +77,7 @@ type FrameInfo struct {
 }
 
 type InitialPacket struct {
-	//CommonHeader QuicLongCommonHeader
+	LongHeader   QuicLongHeader
 	TokenLength  []byte
 	Token        []byte
 	Length       []byte
@@ -78,6 +86,7 @@ type InitialPacket struct {
 }
 
 type RetryPacket struct {
+	LongHeader         QuicLongHeader
 	RetryToken         []byte
 	RetryIntergrityTag []byte
 }

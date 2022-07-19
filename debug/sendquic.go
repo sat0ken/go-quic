@@ -8,7 +8,8 @@ import (
 var localAddr = []byte{127, 0, 0, 1}
 
 func main() {
-	initpacket()
+	//initpacket()
+	retrypacket()
 }
 
 func initpacket() {
@@ -21,7 +22,6 @@ func initpacket() {
 
 	paddingLength := 1252 - len(quic.ToPacket(header)) -
 		len(initPacket.PacketNumber) - len(cryptoFrame) - 16 - 4
-	//paddingLength := 908
 
 	// ゼロ埋めしてPayloadをセット
 	initPacket.Payload = quic.AddPaddingFrame(cryptoFrame, paddingLength)
@@ -40,23 +40,67 @@ func initpacket() {
 	headerByte = append(headerByte, initPacket.PacketNumber...)
 
 	fmt.Printf("header is %x\n", headerByte)
-	//fmt.Printf("Payload is %x\n", initPacket.Payload)
-	//add := tcpip.StrtoByte("c300000001088394c8f03e5157080000449e00000002")
+
 	enctext := quic.EncryptQuicPayload(initPacket.PacketNumber, headerByte, initPacket.Payload, keyblock)
-	fmt.Printf("enctext is %x\n", enctext[0:16])
-	//
-	protectHeader := quic.QuicHeaderToProtect(headerByte, enctext[0:16], keyblock.ClientHeaderProtection)
-	fmt.Printf("protected header is %x\n", protectHeader)
-	// ヘッダとデータで送信するパケットを生成
-	packet := protectHeader
+	//fmt.Printf("enctext is %x\n", enctext[0:16])
+
+	packet := headerByte
 	packet = append(packet, enctext...)
 
-	//fmt.Printf("packet is %x\n", packet)
+	fmt.Printf("header is %x, %+v\n", quic.ToPacket(header), header)
+	protectPacket := quic.ProtectHeader(header, initPacket, packet, keyblock.ClientHeaderProtection)
+	// ヘッダとデータで送信するパケットを生成
+	fmt.Printf("packet is %x\n", protectPacket)
+
+}
+
+func retrypacket() {
+	rawretry := quic.StrtoByte("f00000000100046e19c054938238c63dac3ffe79073d1945aa25d4925e7981e4f5b35488cc6367a9d8de8d3f67fa07d1f601d28f29b408cbdf73e7b8aa0821c46cd9bca7452838dffb9a5e21452fe817b4f7e01bb3546528931dcb812b59161c3d9c2ed3b4ebcb8d04d439f9b1b61decaa08315d4a8d452a0f755bda020e14abc654b2abaf")
+
+	retry := quic.ParseRawQuicPacket(rawretry, true)
+	fmt.Printf("%+v\n", retry)
+
+	shello := quic.StrtoByte("010001240303faac906d7be5be01d2f97311acb0f098c3e7dbb661b6987827e007913f35f442000026c02bc02fc02cc030cca9cca8c009c013c00ac014009c009d002f0035c012000a130113021303010000d50000000e000c0000096c6f63616c686f7374000500050100000000000a000a0008001d001700180019000b00020100000d001a0018080404030807080508060401050106010503060302010203ff0100010000100005000302683300120000002b0003020304003300260024001d002039b2d976219b39efce354d9ac5d4afb52daafd3402e0098fb547fac39007201500390041475f08d68a89670fcc19b00504800800000604800800000704800800000404800c000008010009024064010480007530030245ac0b011a0c000e01040f00200100")
+	cryptoFrame := quic.ToPacket(quic.NewQuicCryptoFrame(shello))
+
+	destconnID := quic.StrtoByte("6e19c054")
+	keyblock := quic.CreateQuicInitialSecret(destconnID)
+	header, initPacket := quic.NewQuicLongHeader(destconnID, nil, 1, 2)
+
+	initPacket.Token = quic.StrtoByte("938238c63dac3ffe79073d1945aa25d4925e7981e4f5b35488cc6367a9d8de8d3f67fa07d1f601d28f29b408cbdf73e7b8aa0821c46cd9bca7452838dffb9a5e21452fe817b4f7e01bb3546528931dcb812b59161c3d9c2ed3b4ebcb8d04d439f9b1b61decaa08315d4a")
+	initPacket.TokenLength = quic.EncodeVariableInt(len(initPacket.Token))
+
+	paddingLength := 1252 - len(quic.ToPacket(header)) -
+		len(initPacket.PacketNumber) - len(cryptoFrame) - 16 - 4 - len(initPacket.Token) - 1
+
+	// ゼロ埋めしてPayloadをセット
+	initPacket.Payload = quic.AddPaddingFrame(cryptoFrame, paddingLength)
+	fmt.Printf("After padding payload is %d\n", len(initPacket.Payload))
+
+	// PayloadのLength + Packet番号のLength + AEADの認証タグ長=16
+	length := len(initPacket.Payload) + len(initPacket.PacketNumber) + 16
+	// 可変長整数のエンコードをしてLengthをセット
+	initPacket.Length = quic.EncodeVariableInt(length)
+
+	headerByte := quic.ToPacket(header)
+	fmt.Printf("header is %x\n", headerByte)
+	// c100000001046e19c05400
+	//
+	// set Token Length
+	headerByte = append(headerByte, initPacket.TokenLength...)
+	headerByte = append(headerByte, initPacket.Token...)
+	headerByte = append(headerByte, initPacket.Length...)
+	headerByte = append(headerByte, initPacket.PacketNumber...)
+
+	fmt.Printf("header is %x\n", headerByte)
+
+	enctext := quic.EncryptQuicPayload(initPacket.PacketNumber, headerByte, initPacket.Payload, keyblock)
+	_ = enctext
 
 }
 
 // InitalPacketの暗号化
-func sendInitialPacket() quic.QuicRawPacket {
+func sendInitialPacket() interface{} {
 	// sampleのDestination接続ID
 	//destconnID := []byte{0xf2, 0xc0, 0x28, 0xbb, 0x71, 0x53, 0x35, 0x74, 0x0e, 0xc0, 0x1d, 0xe2, 0x4d, 0x74}
 	destconnID := []byte{
