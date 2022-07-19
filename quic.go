@@ -134,6 +134,7 @@ func ParseRawQuicPacket(packet []byte, protected bool) (rawpacket interface{}) {
 func UnprotectHeader(commonHeader QuicLongHeader, initpacket InitialPacket, packet, hpkey []byte) interface{} {
 	// https://tex2e.github.io/blog/protocol/quic-initial-packet-decrypt
 	// RFC9001 5.4.2. ヘッダー保護のサンプル
+	// Packet Numberの0byte目があるoffset
 	pnOffset := 7 + len(commonHeader.DestConnID) + len(commonHeader.SourceConnID) + len(initpacket.Length)
 	pnOffset += len(initpacket.Token) + len(initpacket.TokenLength)
 	sampleOffset := pnOffset + 4

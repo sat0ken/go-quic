@@ -8,8 +8,8 @@ import (
 var localAddr = []byte{127, 0, 0, 1}
 
 func main() {
-	//initpacket()
-	retrypacket()
+	initpacket()
+	//retrypacket()
 }
 
 func initpacket() {
@@ -24,7 +24,7 @@ func initpacket() {
 		len(initPacket.PacketNumber) - len(cryptoFrame) - 16 - 4
 
 	// ゼロ埋めしてPayloadをセット
-	initPacket.Payload = quic.AddPaddingFrame(cryptoFrame, paddingLength)
+	initPacket.Payload = quic.UnshiftPaddingFrame(cryptoFrame, paddingLength)
 	//fmt.Printf("paddingLength is %d\n", paddingLength)
 	fmt.Printf("After padding payload is %d\n", len(initPacket.Payload))
 
@@ -74,7 +74,7 @@ func retrypacket() {
 		len(initPacket.PacketNumber) - len(cryptoFrame) - 16 - 4 - len(initPacket.Token) - 1
 
 	// ゼロ埋めしてPayloadをセット
-	initPacket.Payload = quic.AddPaddingFrame(cryptoFrame, paddingLength)
+	initPacket.Payload = quic.UnshiftPaddingFrame(cryptoFrame, paddingLength)
 	fmt.Printf("After padding payload is %d\n", len(initPacket.Payload))
 
 	// PayloadのLength + Packet番号のLength + AEADの認証タグ長=16
@@ -138,7 +138,7 @@ func sendInitialPacket() interface{} {
 	//	4, 322)
 
 	// ゼロ埋めしてPayloadをセット
-	initPacket.Payload = quic.AddPaddingFrame(cryptoByte, paddingLength)
+	initPacket.Payload = quic.AppendPaddingFrame(cryptoByte, paddingLength)
 	//fmt.Printf("paddingLength is %d, %d\n", paddingLength, len(initPacket.Payload))
 	//fmt.Printf("After padding payload is %x\n", initPacket.Payload)
 
