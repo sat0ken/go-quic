@@ -60,11 +60,6 @@ type QuicLongHeader struct {
 	SourceConnID       []byte
 }
 
-//type QuicFrame struct {
-//	FrameInfo FrameInfo
-//	Packet    interface{}
-//}
-
 type FrameInfo struct {
 	HeaderForm         string
 	FixedBit           string

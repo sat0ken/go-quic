@@ -85,13 +85,23 @@ func decryptTest() {
 	rawheader := rawpacket.QuicHeader.(quic.QuicLongHeader)
 	rawinitPacket := rawpacket.QuicFrames[0].(quic.InitialPacket)
 
-	unprotect := quic.QuicPacketToUnprotect(rawheader, rawinitPacket, resultProtectedPacket, keyblock.ClientHeaderProtection)
+	// ヘッダ保護を解除してパースされたパケット
+	unprotect := quic.QuicPacketToUnprotect(rawheader, rawinitPacket, resultProtectedPacket, keyblock.ServerHeaderProtection)
 	header := unprotect.QuicHeader.(quic.QuicLongHeader)
 	initPacket := unprotect.QuicFrames[0].(quic.InitialPacket)
 
-	fmt.Printf("header is %x\n", quic.ToPacket(header))
-	fmt.Printf("initpacket is %x\n", initPacket.PacketNumber)
+	//fmt.Printf("header is %x\n", quic.ToPacket(header))
+	//fmt.Printf("initpacket is %x\n", quic.ToPacket(initPacket))
 
+	headerByte := quic.ToPacket(header)
+	headerByte = append(headerByte, initPacket.TokenLength...)
+	headerByte = append(headerByte, initPacket.Length...)
+	headerByte = append(headerByte, initPacket.PacketNumber...)
+	fmt.Printf("header is %x\n", headerByte)
+	plain := quic.DecryptQuicPayload(initPacket.PacketNumber, headerByte, initPacket.Payload, keyblock)
+
+	frame := quic.ParseQuicFrame(plain)
+	fmt.Printf("frame is %+v\n", frame)
 }
 
 func decryptSamplePacket() {
@@ -116,6 +126,7 @@ func decryptSamplePacket() {
 	headerByte = append(headerByte, initpacket.TokenLength...)
 	headerByte = append(headerByte, initpacket.Length...)
 	headerByte = append(headerByte, initpacket.PacketNumber...)
+	fmt.Printf("header is %x\n", headerByte)
 
 	plain := quic.DecryptQuicPayload(initpacket.PacketNumber, headerByte, initpacket.Payload, keyblock)
 	//fmt.Printf("header is %x\n", headerByte)

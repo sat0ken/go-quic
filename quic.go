@@ -145,7 +145,7 @@ func QuicPacketToUnprotect(commonHeader QuicLongHeader, initpacket InitialPacket
 	fmt.Printf("pnOffset is %d, sampleOffset is %d\n", pnOffset, sampleOffset)
 	block, err := aes.NewCipher(hpkey)
 	if err != nil {
-		log.Fatalf("ヘッダ保護解除エラー : %v\n", err)
+		log.Fatalf("header unprotect error : %v\n", err)
 	}
 	sample := packet[sampleOffset : sampleOffset+16]
 	encsample := make([]byte, len(sample))
@@ -164,14 +164,14 @@ func QuicPacketToUnprotect(commonHeader QuicLongHeader, initpacket InitialPacket
 	for i, _ := range a {
 		packet[pnOffset+i] = a[i]
 	}
-	fmt.Printf("packet is %x\n", packet)
+
 	return ParseRawQuicPacket(packet, false)
 }
 
 func QuicHeaderToProtect(header, sample, hp []byte) []byte {
 	block, err := aes.NewCipher(hp)
 	if err != nil {
-		log.Fatalf("ヘッダ保護エラー : %v\n", err)
+		log.Fatalf("header protect error : %v\n", err)
 	}
 	mask := make([]byte, len(sample))
 	block.Encrypt(mask, sample)
@@ -196,14 +196,14 @@ func QuicHeaderToProtect(header, sample, hp []byte) []byte {
 
 func DecryptQuicPayload(packetNumber, header, payload []byte, keyblock QuicKeyBlock) []byte {
 	// パケット番号で8byteのnonceにする
-	packetnum := extendArrByZero(packetNumber, len(keyblock.ClientIV))
+	packetnum := extendArrByZero(packetNumber, len(keyblock.ServerIV))
 
-	block, _ := aes.NewCipher(keyblock.ClientKey)
+	block, _ := aes.NewCipher(keyblock.ServerKey)
 	aesgcm, _ := cipher.NewGCM(block)
 	// IVとxorしたのをnonceにする
 	//nonce := getXORNonce(packetnum, keyblock.ClientIV)
 	for i, _ := range packetnum {
-		packetnum[i] ^= keyblock.ClientIV[i]
+		packetnum[i] ^= keyblock.ServerIV[i]
 	}
 	// 復号する
 	plaintext, err := aesgcm.Open(nil, packetnum, payload, header)
