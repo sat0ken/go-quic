@@ -67,9 +67,9 @@ func samplePacketProtect() {
 }
 
 func main() {
-	samplePacketProtect()
+	//samplePacketProtect()
 	//decryptSamplePacket()
-	//decryptTestHandshake()
+	decryptTestHandshake()
 }
 
 func decryptTestHandshake() {
