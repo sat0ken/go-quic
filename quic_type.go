@@ -1,11 +1,11 @@
 package quic
 
 const (
-	QuicFrameTypePing          = 0x01
-	QuicFrameTypeACK           = 0x02
-	QuicFrameTypeCrypto        = 0x06
-	QuicFrameTypeNewToken      = 0x07
-	QuicFrameTypeHandShakeDone = 0x1e
+	Ping          = 0x01
+	ACK           = 0x02
+	Crypto        = 0x06
+	NewToken      = 0x07
+	HandShakeDone = 0x1e
 )
 
 var initialSalt = []byte{
@@ -87,14 +87,14 @@ type RetryPacket struct {
 	RetryIntergrityTag []byte
 }
 
-type QuicCryptoFrame struct {
+type FrameTypeCrypto struct {
 	Type   []byte
 	Offset []byte
 	Length []byte
 	Data   []byte
 }
 
-type QuicACKFrame struct {
+type FrameTypeACK struct {
 	Type                []byte
 	LargestAcknowledged []byte
 	AckDelay            []byte

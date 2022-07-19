@@ -70,7 +70,28 @@ func samplePacketProtect() {
 
 func main() {
 	//samplePacketProtect()
-	decryptSamplePacket()
+	//decryptSamplePacket()
+	decryptTest()
+}
+
+func decryptTest() {
+	destconnID := quic.StrtoByte("6e19c054")
+	// destination connection id からキーを生成する
+	keyblock := quic.CreateQuicInitialSecret(destconnID)
+
+	resultProtectedPacket := quic.StrtoByte("c900000001000442523d4f00407561383ddbedbcdd8cb03add8008e3d3bb0a6be69a979cdba213652ac3157bc85659996d86c394e6131a2ee8dbc383b3d1c2bda195f3b01b9b99260ef27adea0c8ff486043140ec55b0d93e0904ae41c594e0ce8ee793dcf1b49046ea66ef86fdb6632acf575003c8393279322c6e232ae17df526fba")
+	rawpacket := quic.ParseRawQuicPacket(resultProtectedPacket, true)
+
+	rawheader := rawpacket.QuicHeader.(quic.QuicLongHeader)
+	rawinitPacket := rawpacket.QuicFrames[0].(quic.InitialPacket)
+
+	unprotect := quic.QuicPacketToUnprotect(rawheader, rawinitPacket, resultProtectedPacket, keyblock.ClientHeaderProtection)
+	header := unprotect.QuicHeader.(quic.QuicLongHeader)
+	initPacket := unprotect.QuicFrames[0].(quic.InitialPacket)
+
+	fmt.Printf("header is %x\n", quic.ToPacket(header))
+	fmt.Printf("initpacket is %x\n", initPacket.PacketNumber)
+
 }
 
 func decryptSamplePacket() {
@@ -97,9 +118,9 @@ func decryptSamplePacket() {
 	headerByte = append(headerByte, initpacket.PacketNumber...)
 
 	plain := quic.DecryptQuicPayload(initpacket.PacketNumber, headerByte, initpacket.Payload, keyblock)
-	fmt.Printf("header is %x\n", headerByte)
+	//fmt.Printf("header is %x\n", headerByte)
 	fmt.Printf("plain is %x\n", quic.SkipPaddingFrame(plain))
-	//fmt.Printf("payload is %x\n", initpacket.Payload)
+	//fmt.Printf("plain is %x\n", plain)
 	//fmt.Printf("%x%x%x\n", initpacket.Token, initpacket.Length, initpacket.PacketNumber)
 
 }

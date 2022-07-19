@@ -164,7 +164,7 @@ func QuicPacketToUnprotect(commonHeader QuicLongHeader, initpacket InitialPacket
 	for i, _ := range a {
 		packet[pnOffset+i] = a[i]
 	}
-
+	fmt.Printf("packet is %x\n", packet)
 	return ParseRawQuicPacket(packet, false)
 }
 
@@ -232,16 +232,16 @@ func EncryptQuicPayload(packetNumber, header, payload []byte, keyblock QuicKeyBl
 func ParseQuicFrame(packet []byte) (frames interface{}) {
 	for i := 0; i < len(packet); i++ {
 		switch packet[0] {
-		case QuicFrameTypeACK:
-			frames = QuicACKFrame{
+		case ACK:
+			frames = FrameTypeACK{
 				Type:                packet[0:1],
 				LargestAcknowledged: packet[1:2],
 				AckDelay:            packet[2:3],
 				AckRangeCount:       packet[3:4],
 				FirstAckRange:       packet[4:5],
 			}
-		case QuicFrameTypeCrypto:
-			cframe := QuicCryptoFrame{
+		case Crypto:
+			cframe := FrameTypeCrypto{
 				Type:   packet[0:1],
 				Offset: packet[1:2],
 			}
@@ -332,9 +332,9 @@ func EncodeVariableInt(length int) []byte {
 	return UintTo2byte(uint16(enc))
 }
 
-func NewQuicCryptoFrame(data []byte) QuicCryptoFrame {
-	return QuicCryptoFrame{
-		Type:   []byte{QuicFrameTypeCrypto},
+func NewQuicCryptoFrame(data []byte) FrameTypeCrypto {
+	return FrameTypeCrypto{
+		Type:   []byte{Crypto},
 		Offset: []byte{0x00},
 		Length: EncodeVariableInt(len(data)),
 		Data:   data,
