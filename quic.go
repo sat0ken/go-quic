@@ -198,32 +198,6 @@ func ProtectHeader(commonHeader QuicLongHeader, initpacket InitialPacket, packet
 	return packet
 }
 
-//func QuicHeaderToProtect(header, sample, hp []byte) []byte {
-//	block, err := aes.NewCipher(hp)
-//	if err != nil {
-//		log.Fatalf("header protect error : %v\n", err)
-//	}
-//	mask := make([]byte, len(sample))
-//	block.Encrypt(mask, sample)
-//
-//	// ヘッダの最初のバイトを保護
-//	header[0] ^= mask[0] & 0x0f
-//
-//	// Packet Numberの0byte目がある場所
-//	pnumStartOffset := len(header) - 4
-//
-//	a := header[pnumStartOffset : pnumStartOffset+4]
-//	b := mask[1:5]
-//	for i, _ := range a {
-//		a[i] ^= b[i]
-//	}
-//	// パケット番号をセットして保護する
-//	for i, _ := range a {
-//		header[pnumStartOffset+i] = a[i]
-//	}
-//	return header
-//}
-
 func DecryptQuicPayload(packetNumber, header, payload []byte, keyblock QuicKeyBlock) []byte {
 	// パケット番号で8byteのnonceにする
 	packetnum := extendArrByZero(packetNumber, len(keyblock.ServerIV))
@@ -259,17 +233,18 @@ func EncryptQuicPayload(packetNumber, header, payload []byte, keyblock QuicKeyBl
 }
 
 // 復号化されたQUICパケットのフレームをパースする
-func ParseQuicFrame(packet []byte) (frames interface{}) {
+func ParseQuicFrame(packet []byte) (frame []interface{}) {
 	for i := 0; i < len(packet); i++ {
 		switch packet[0] {
 		case ACK:
-			frames = FrameTypeACK{
+			frame = append(frame, FrameTypeACK{
 				Type:                packet[0:1],
 				LargestAcknowledged: packet[1:2],
 				AckDelay:            packet[2:3],
 				AckRangeCount:       packet[3:4],
 				FirstAckRange:       packet[4:5],
-			}
+			})
+			i += 5
 		case Crypto:
 			cframe := FrameTypeCrypto{
 				Type:   packet[0:1],
@@ -278,10 +253,10 @@ func ParseQuicFrame(packet []byte) (frames interface{}) {
 			decodedLength := sumByteArr(DecodeVariableInt([]int{int(packet[2]), int(packet[3])}))
 			cframe.Length = UintTo2byte(uint16(decodedLength))
 			cframe.Data = packet[4 : 4+decodedLength]
-			frames = cframe
+			frame = append(frame, cframe)
 		}
 	}
-	return frames
+	return frame
 }
 
 func NewQuicLongHeader(destConnID, sourceConnID []byte, pnum, pnumlen uint) (QuicLongHeader, InitialPacket) {
