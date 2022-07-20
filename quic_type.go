@@ -68,14 +68,6 @@ type QuicLongHeader struct {
 	SourceConnID       []byte
 }
 
-type FrameInfo struct {
-	HeaderForm         string
-	FixedBit           string
-	PacketType         string
-	Reserved           string
-	PacketNumberLegnth string
-}
-
 type InitialPacket struct {
 	LongHeader   QuicLongHeader
 	TokenLength  []byte

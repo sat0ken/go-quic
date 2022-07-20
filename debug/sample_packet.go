@@ -68,8 +68,12 @@ func samplePacketProtect() {
 
 func main() {
 	//samplePacketProtect()
-	//decryptSamplePacket()
-	decryptTestHandshake()
+	decryptSamplePacket()
+	//decryptTestHandshake()
+
+	//header := fmt.Sprintf("11100001")
+	//hex, _ := strconv.ParseUint(header, 2, 8)
+	//fmt.Printf("%x\n", hex)
 }
 
 func decryptTestHandshake() {
@@ -77,7 +81,10 @@ func decryptTestHandshake() {
 	// destination connection id からキーを生成する
 	keyblock := quic.CreateQuicInitialSecret(destconnID)
 
-	resultProtectedPacket := quic.StrtoByte("c900000001000442523d4f00407561383ddbedbcdd8cb03add8008e3d3bb0a6be69a979cdba213652ac3157bc85659996d86c394e6131a2ee8dbc383b3d1c2bda195f3b01b9b99260ef27adea0c8ff486043140ec55b0d93e0904ae41c594e0ce8ee793dcf1b49046ea66ef86fdb6632acf575003c8393279322c6e232ae17df526fba")
+	// InitialパケットのACKとCRYPTO(ServerHello)
+	//resultProtectedPacket := quic.StrtoByte("c900000001000442523d4f00407561383ddbedbcdd8cb03add8008e3d3bb0a6be69a979cdba213652ac3157bc85659996d86c394e6131a2ee8dbc383b3d1c2bda195f3b01b9b99260ef27adea0c8ff486043140ec55b0d93e0904ae41c594e0ce8ee793dcf1b49046ea66ef86fdb6632acf575003c8393279322c6e232ae17df526fba")
+	// HandshakeパケットのCRYPTOのMultipile Handshake Message(Encrypted Extension, Certificate, Certificate Verify)
+	resultProtectedPacket := quic.StrtoByte("e500000001000442523d4f4454033b117b4a5406074c6001fc0086bf5108cdf5e46974e192d36ad116fe839e6d144e3ccaa1c9c66a4382950655701bd5714d13119ebb615c8b414146b6392f75ca55678e61c9e0b58c8275fcab286263016ac2e09bf2678bd6f48189654eef93045ee4e73973570ec2bd84f77daefe0977de0da1d27baf6c755337eba8a0d63a5726f59a189df6c0744f4f6de5e9c86283d456a7bfeec1fb5c3258ca367ff92a5d63114112861445bb2038e95933d0b2ca4b637bd39f82e74968365d32057291ae2f0bb9710ac0b1abb849674e271cda5946436900794b96562922fd742d71bdb1ff997bb772451b3c8a6db5804899bcbd0e3b1f2b25ed3300caff87e6269ac3d473f45340abbc2f380933be308b237a2a90626d2b761eaa85b930f2ece83a9630166408933b42a0dff95d715bc4368dc0884038106ed5b5e92bd334fac0d1f45f8521962065450f93ee99490988c2b7948222d32e8aca810191c0232f0decd6300055b10301004526cc4e0e5b029553136543c789ca432079550b5c4010ab9c5d215d6a63b877106722faff1b895404d315dc5183360cacd35d139452a270c7b10c7e225d4190de6dc1b6cc4038c487526b3d9fece4d9438e92c510a072332e65546492e66e68e97448797fcc51421305589d697d72fdbfeb1dd53e9c1f22b6923f852dc6a42cd7678f94bf3707dd2687b5a0d73af5e9327135c3277730f39054ad6768bbc7d8bd952bc79d12313436610222a2658f6c7f1bd05978074828bebb1a1c765ac6965364563b369c25356f62cf052546f126212a7b943b8d4c36515ed37abeb292764db3fa5668e4982d26ddbeee24c59b36cf1d126d5eb825949f6bd7130b38503943309a4ae861e4ecbcaa0a02236e6a3d9cd5ba4b011da3aea9c0f7e245b1ec8fd5ac61090a2cddf666f1c8976ceb4b940d0bb4eae6be0d6fb7351b4a7f4b1a65fbafb3f0db130a744a363dd270e989fd7132c3546493388f193f7affe7fb73bc318dd634dc7a0819f638ee1d86c3b992bd796266c65ff84056a1a1edde9130ee6d74487448ac6baca787a0b9554d6e198381154f86852afcb3146afff6ea153a1053e62de74e7330bbfeed9e787b653532222f653891af0547a57678fe48bcca6e508ab7c8b20d467431ff3c00a96721cf015eb7693e0d8e576732acd441bc1a21544e447f760837800ecfcd75f94169374419a882fc407fd1c73071f611766a8388a4917a3b45dc00790589cd3bf6c0c2cee59f2809b6978c8d3f856e851fb9f69f98ee7c2d8b4ef7d37890f6347fb9a2c209f6af3ecf2cba40967ed1a7c42ebfff71349428b64d4f152f8919fe6000b2e0030f1d56ff8770f845abc9dcc7619b324b8c39884a0fc644f57590386a4710e3c7cd84059f92e2a47eaca393f5034f2ace911e1a6662584e0220e1beb8a6fc86c053391ac47b09254ce3d23c9202bfa7e1b39aa27c2dd52770d2bcc19048fa62084ee3e55f2995f2f8d2e1ce023478ec04044a1247269e686bf08abd2d7391795a56e2315734c78807af43ed0b95ba847b5eaf616866fb9ea5e19b")
 	rawpacket := quic.ParseRawQuicPacket(resultProtectedPacket, true)
 
 	rawheader := rawpacket.(quic.InitialPacket).LongHeader
@@ -88,7 +95,7 @@ func decryptTestHandshake() {
 	header := unprotect.(quic.InitialPacket).LongHeader
 	initPacket := unprotect.(quic.InitialPacket)
 
-	//fmt.Printf("header is %x\n", quic.ToPacket(header))
+	fmt.Printf("header is %x\n", quic.ToPacket(header))
 	//fmt.Printf("initpacket is %x\n", quic.ToPacket(initPacket))
 
 	headerByte := quic.ToPacket(header)
@@ -97,9 +104,9 @@ func decryptTestHandshake() {
 	headerByte = append(headerByte, initPacket.PacketNumber...)
 	plain := quic.DecryptQuicPayload(initPacket.PacketNumber, headerByte, initPacket.Payload, keyblock)
 
-	frame := quic.ParseQuicFrame(plain)
-	shello := quic.ParseTLSHandshake(frame[1].(quic.CryptoFrames).Data)
-	fmt.Printf("server hello %+v\n", shello)
+	//frame := quic.ParseQuicFrame(plain)
+	//shello := quic.ParseTLSHandshake(frame[1].(quic.CryptoFrames).Data)
+	fmt.Printf("server hello %+v\n", plain)
 }
 
 func decryptSamplePacket() {
@@ -115,7 +122,7 @@ func decryptSamplePacket() {
 	// destination connection id からキーを生成する
 	keyblock := quic.CreateQuicInitialSecret(rawheader.DestConnID)
 
-	//fmt.Printf("header is %x, %+v\n", quic.ToPacket(rawheader), rawheader)
+	fmt.Printf("header is %x, %+v\n", quic.ToPacket(rawheader), rawheader)
 	//fmt.Printf("init packet is %x%x%x\n", rawinitPacket.Token, rawinitPacket.Length, rawinitPacket.PacketNumber)
 
 	// ヘッダ保護を解除してパースされたパケット

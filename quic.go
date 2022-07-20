@@ -103,6 +103,19 @@ func ParseRawQuicPacket(packet []byte, protected bool) (rawpacket interface{}) {
 
 	case "10":
 		fmt.Println("Handshake Packet")
+		commonHeader := QuicLongHeader{
+			HeaderByte: packet[0:1],
+			Version:    packet[1:5],
+		}
+		// Destination Connection Length と ID
+		if bytes.Equal(packet[5:6], []byte{0x00}) {
+			commonHeader.DestConnID = packet[5:6]
+			packet = packet[6:]
+		}
+		commonHeader.SourceConnIDLength = packet[0:1]
+		commonHeader.SourceConnID = packet[:1+int(commonHeader.SourceConnIDLength[0])]
+		// packetを縮める
+		packet = packet[1+int(commonHeader.SourceConnID[0]):]
 	// Retry Packet
 	case "11":
 		commonHeader := QuicLongHeader{
