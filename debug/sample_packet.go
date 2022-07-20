@@ -95,11 +95,11 @@ func decryptTestHandshake() {
 	headerByte = append(headerByte, initPacket.TokenLength...)
 	headerByte = append(headerByte, initPacket.Length...)
 	headerByte = append(headerByte, initPacket.PacketNumber...)
-	fmt.Printf("header is %x\n", headerByte)
 	plain := quic.DecryptQuicPayload(initPacket.PacketNumber, headerByte, initPacket.Payload, keyblock)
 
 	frame := quic.ParseQuicFrame(plain)
-	fmt.Printf("frame is %+v\n", frame)
+	shello := quic.ParseTLSHandshake(frame[1].(quic.CryptoFrames).Data)
+	fmt.Printf("server hello %+v\n", shello)
 }
 
 func decryptSamplePacket() {

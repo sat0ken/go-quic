@@ -91,14 +91,14 @@ type RetryPacket struct {
 	RetryIntergrityTag []byte
 }
 
-type FrameTypeCrypto struct {
+type CryptoFrames struct {
 	Type   []byte
 	Offset []byte
 	Length []byte
 	Data   []byte
 }
 
-type FrameTypeACK struct {
+type ACKFrames struct {
 	Type                []byte
 	LargestAcknowledged []byte
 	AckDelay            []byte

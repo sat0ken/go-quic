@@ -94,7 +94,7 @@ func setQuicTLSExtension(hostname []byte) ([]byte, ECDHEKeys) {
 	var tlsExtension []byte
 
 	// server_name
-	tlsExtension = append(tlsExtension, makeServerNameExt(hostname)...)
+	tlsExtension = append(tlsExtension, setServerNameExt(hostname)...)
 
 	//　status_reqeust
 	tlsExtension = append(tlsExtension, []byte{0x00, 0x05, 0x00, 0x05, 0x01, 0x00, 0x00, 0x00, 0x00}...)
@@ -147,7 +147,7 @@ func setQuicTLSExtension(hostname []byte) ([]byte, ECDHEKeys) {
 	return tlsExtension, clientkey
 }
 
-func ParseQuicTLSHandshake(packet []byte) interface{} {
+func ParseTLSHandshake(packet []byte) interface{} {
 	var i interface{}
 
 	switch packet[0] {
@@ -161,33 +161,15 @@ func ParseQuicTLSHandshake(packet []byte) interface{} {
 			CipherSuites:      packet[39:41],
 			CompressionMethod: packet[41:42],
 			ExtensionLength:   packet[42:44],
+			TLSExtensions:     ParseTLSExtensions(packet[44:]),
 		}
-		// Memo: Googleのサーバはkey_share, supported_versionの順番でTLS Extensionsが送られてくる模様
-		// Todo: Extensionsをパースする関数を作らないと順番入れ替ってパースできなくて草
-		// key_share
-		hello.TLSExtensions = append(hello.TLSExtensions, TLSExtensions{
-			Type:   packet[44:46],
-			Length: packet[46:48],
-			Value: map[string]interface{}{
-				"Group":             packet[48:50],
-				"KeyExchangeLength": packet[50:52],
-				"KeyExchange":       packet[52:84],
-			},
-		})
-		// supported_versions
-		hello.TLSExtensions = append(hello.TLSExtensions, TLSExtensions{
-			Type:   packet[84:86],
-			Length: packet[86:88],
-			Value:  packet[88:90],
-		})
 		i = hello
-
 	}
 
 	return i
 }
 
-func makeServerNameExt(hostname []byte) []byte {
+func setServerNameExt(hostname []byte) []byte {
 	sname := ServerNameIndicationExtension{
 		ServerNameListLength: UintTo2byte(uint16(len(hostname) + 3)),
 		ServerNameType:       []byte{0x00},
@@ -202,4 +184,34 @@ func makeServerNameExt(hostname []byte) []byte {
 	extbyte = append(extbyte, toByteArr(sname)...)
 
 	return extbyte
+}
+
+func ParseTLSExtensions(extPacket []byte) (tlsEx []TLSExtensions) {
+	for i := 0; i < len(extPacket); i++ {
+		switch extPacket[1] {
+		case TLSExtSupportedVersions:
+			tlsEx = append(tlsEx, TLSExtensions{
+				Type:   extPacket[0:2],
+				Length: extPacket[2:4],
+				Value: SupportedVersions{
+					Version: extPacket[4:6],
+				},
+			})
+			extPacket = extPacket[6:]
+			i = 0
+		case TLSExtKeyShare:
+			tlsEx = append(tlsEx, TLSExtensions{
+				Type:   extPacket[0:2],
+				Length: extPacket[2:4],
+				Value: KeyShareExtension{
+					Group:             extPacket[4:6],
+					KeyExchangeLength: extPacket[6:8],
+					KeyExchange:       extPacket[8:40],
+				},
+			})
+			extPacket = extPacket[6:]
+			i = 0
+		}
+	}
+	return tlsEx
 }

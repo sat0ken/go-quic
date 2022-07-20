@@ -237,16 +237,19 @@ func ParseQuicFrame(packet []byte) (frame []interface{}) {
 	for i := 0; i < len(packet); i++ {
 		switch packet[0] {
 		case ACK:
-			frame = append(frame, FrameTypeACK{
+			frame = append(frame, ACKFrames{
 				Type:                packet[0:1],
 				LargestAcknowledged: packet[1:2],
 				AckDelay:            packet[2:3],
 				AckRangeCount:       packet[3:4],
 				FirstAckRange:       packet[4:5],
 			})
-			i += 5
+			// パースしたフレームを取り除く
+			packet = packet[5:]
+			// 0にしてパケットを読み込む
+			i = 0
 		case Crypto:
-			cframe := FrameTypeCrypto{
+			cframe := CryptoFrames{
 				Type:   packet[0:1],
 				Offset: packet[1:2],
 			}
@@ -254,6 +257,10 @@ func ParseQuicFrame(packet []byte) (frame []interface{}) {
 			cframe.Length = UintTo2byte(uint16(decodedLength))
 			cframe.Data = packet[4 : 4+decodedLength]
 			frame = append(frame, cframe)
+			// パースしたフレームを取り除く
+			packet = packet[4+decodedLength:]
+			// 0にしてパケットを読み込む
+			i = 0
 		}
 	}
 	return frame
@@ -337,8 +344,8 @@ func EncodeVariableInt(length int) []byte {
 	return UintTo2byte(uint16(enc))
 }
 
-func NewQuicCryptoFrame(data []byte) FrameTypeCrypto {
-	return FrameTypeCrypto{
+func NewQuicCryptoFrame(data []byte) CryptoFrames {
+	return CryptoFrames{
 		Type:   []byte{Crypto},
 		Offset: []byte{0x00},
 		Length: EncodeVariableInt(len(data)),

@@ -21,6 +21,8 @@ const (
 	HandshakeTypeChangeCipherSpec    = 0x14 //=20
 	HandshakeTypeFinished            = 0x14
 	CurveIDx25519                    = 0x1D
+	TLSExtSupportedVersions          = 0x2b
+	TLSExtKeyShare                   = 0x33
 
 	// 4.4.3. Certificate Verify
 	str0x20x64 = "20202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020"
@@ -246,4 +248,14 @@ type ServerNameIndicationExtension struct {
 	ServerNameType       []byte
 	ServerNameLength     []byte
 	ServerName           []byte
+}
+
+type SupportedVersions struct {
+	Version []byte
+}
+
+type KeyShareExtension struct {
+	Group             []byte
+	KeyExchangeLength []byte
+	KeyExchange       []byte
 }
