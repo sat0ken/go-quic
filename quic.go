@@ -27,7 +27,7 @@ func CreateQuicInitialSecret(dstConnId []byte) QuicKeyBlock {
 }
 
 // QUICパケットをパースする
-func ParseRawQuicPacket(packet []byte, protected bool) (rawpacket interface{}) {
+func ParseRawQuicPacket(packet []byte, protected bool) (rawpacket interface{}, packetType int) {
 
 	p0 := fmt.Sprintf("%08b", packet[0])
 	// LongHeader = 1 で始まる
@@ -35,32 +35,12 @@ func ParseRawQuicPacket(packet []byte, protected bool) (rawpacket interface{}) {
 	switch p0[2:4] {
 	// Initial Packet
 	case "00":
-		commonHeader := QuicLongHeader{
-			HeaderByte:       packet[0:1],
-			Version:          packet[1:5],
-			DestConnIDLength: packet[5:6],
-		}
-		commonHeader.DestConnID = packet[6 : 6+int(commonHeader.DestConnIDLength[0])]
-		// packetを縮める
-		packet = packet[6+int(commonHeader.DestConnIDLength[0]):]
+		// Longヘッダの処理
+		packet, header := ReadLongHeader(packet)
 
-		// SourceID Connection Lengthが0なら
-		if bytes.Equal(packet[0:1], []byte{0x00}) {
-			commonHeader.SourceConnIDLength = packet[0:1]
-			// packetを縮める
-			packet = packet[1:]
-		} else {
-			commonHeader.SourceConnIDLength = packet[0:1]
-			commonHeader.SourceConnID = packet[1 : 1+int(commonHeader.SourceConnIDLength[0])]
-			// packetを縮める
-			packet = packet[1+int(commonHeader.SourceConnIDLength[0]):]
-		}
-		//fmt.Printf("packet is %x\n", packet)
-
-		// Longヘッダの処理はここまで
 		// ここからInitialパケットの処理
 		var initPacket InitialPacket
-		initPacket.LongHeader = commonHeader
+		initPacket.LongHeader = header
 
 		// Token Lengthが0なら
 		if bytes.Equal(packet[0:1], []byte{0x00}) {
@@ -73,78 +53,99 @@ func ParseRawQuicPacket(packet []byte, protected bool) (rawpacket interface{}) {
 			// packetを縮める
 			packet = packet[1+int(initPacket.TokenLength[0]):]
 		}
-
 		// Length~を処理
-		if protected {
-			initPacket.Length = packet[0:2]
-			initPacket.PacketNumber = packet[2:4]
-			initPacket.Payload = packet[4:]
-			//可変長整数をデコードする
-			initPacket.Length = DecodeVariableInt([]int{int(initPacket.Length[0]), int(initPacket.Length[1])})
-		} else {
-			initPacket.Length = packet[0:2]
-			// パケット番号の長さで変える
-			if bytes.Equal(commonHeader.HeaderByte, []byte{0xC3}) {
-				// 4byteのとき
-				initPacket.PacketNumber = packet[2:6]
-				initPacket.Payload = packet[6:]
-			} else if bytes.Equal(commonHeader.HeaderByte, []byte{0xC1}) {
-				// 2byteのとき
-				initPacket.PacketNumber = packet[2:4]
-				initPacket.Payload = packet[4:]
-			} else if bytes.Equal(commonHeader.HeaderByte, []byte{0xC0}) {
-				// 1byteのとき
-				initPacket.PacketNumber = packet[2:3]
-				initPacket.Payload = packet[3:]
-			}
-		}
+		initPacket.Length, initPacket.PacketNumber, initPacket.Payload = ReadPacketLengthNumberPayload(
+			packet, initPacket.LongHeader.HeaderByte, protected)
 
 		rawpacket = initPacket
-
+		packetType = LongPacketTypeInitial
+	// Handshake Packet
 	case "10":
-		fmt.Println("Handshake Packet")
-		commonHeader := QuicLongHeader{
-			HeaderByte: packet[0:1],
-			Version:    packet[1:5],
-		}
-		// Destination Connection Length と ID
-		if bytes.Equal(packet[5:6], []byte{0x00}) {
-			commonHeader.DestConnID = packet[5:6]
-			packet = packet[6:]
-		}
-		commonHeader.SourceConnIDLength = packet[0:1]
-		commonHeader.SourceConnID = packet[:1+int(commonHeader.SourceConnIDLength[0])]
-		// packetを縮める
-		packet = packet[1+int(commonHeader.SourceConnID[0]):]
+		packet, header := ReadLongHeader(packet)
+		// Longヘッダの処理はここまで
+		// ここからHandshakeパケットの処理、Length〜を埋める
+		var handshake HandshakePacket
+		handshake.LongHeader = header
+
+		handshake.Length, handshake.PacketNumber, handshake.Payload = ReadPacketLengthNumberPayload(
+			packet, handshake.LongHeader.HeaderByte, true)
+
+		rawpacket = handshake
+		packetType = LongPacketTypeHandshake
+
 	// Retry Packet
 	case "11":
-		commonHeader := QuicLongHeader{
-			HeaderByte: packet[0:1],
-			Version:    packet[1:5],
-			//PacketType: LongPacketTypeRetry,
-		}
-		// Destination Connection Length と ID
-		if bytes.Equal(packet[5:6], []byte{0x00}) {
-			commonHeader.DestConnID = packet[5:6]
-			packet = packet[6:]
-		}
-		commonHeader.SourceConnIDLength = packet[0:1]
-		commonHeader.SourceConnID = packet[:1+int(commonHeader.SourceConnIDLength[0])]
-		// packetを縮める
-		packet = packet[1+int(commonHeader.SourceConnID[0]):]
-
+		packet, header := ReadLongHeader(packet)
 		rawpacket = RetryPacket{
-			LongHeader:         commonHeader,
+			LongHeader:         header,
 			RetryToken:         packet[0 : len(packet)-16],
 			RetryIntergrityTag: packet[len(packet)-16:],
 		}
+		packetType = LongPacketTypeRetry
 	}
 
-	return rawpacket
+	return rawpacket, packetType
+}
+
+func ReadLongHeader(packet []byte) ([]byte, QuicLongHeader) {
+	header := QuicLongHeader{
+		HeaderByte:       packet[0:1],
+		Version:          packet[1:5],
+		DestConnIDLength: packet[5:6],
+	}
+	// Destination Connection Lengthが0ならパケットを詰める
+	if bytes.Equal(header.DestConnIDLength, []byte{0x00}) {
+		packet = packet[6:]
+	} else {
+		header.DestConnID = packet[6 : 6+int(header.DestConnIDLength[0])]
+		// packetを詰める
+		packet = packet[6+int(header.DestConnIDLength[0]):]
+	}
+	// SourceID Connection Lengthが0ならパケットを詰める
+	if bytes.Equal(packet[0:1], []byte{0x00}) {
+		header.SourceConnIDLength = packet[0:1]
+		// packetを縮める
+		packet = packet[1:]
+	} else {
+		header.SourceConnIDLength = packet[0:1]
+		header.SourceConnID = packet[1 : 1+int(header.SourceConnIDLength[0])]
+		// packetを縮める
+		packet = packet[1+int(header.SourceConnIDLength[0]):]
+	}
+	return packet, header
+}
+
+func ReadPacketLengthNumberPayload(packet, headerByte []byte, protected bool) (length, pnumber, payload []byte) {
+	// Length~を処理
+	if protected {
+		length = packet[0:2]
+		pnumber = packet[2:4]
+		payload = packet[4:]
+		//可変長整数のpacket lengthをデコードする
+		length = DecodeVariableInt([]int{int(length[0]), int(length[1])})
+	} else {
+		length = packet[0:2]
+		// packet lengthで変える
+		if bytes.Equal(headerByte, []byte{0xC3}) {
+			// 4byteのとき
+			pnumber = packet[2:6]
+			payload = packet[6:]
+		} else if bytes.Equal(headerByte, []byte{0xC1}) {
+			// 2byteのとき
+			pnumber = packet[2:4]
+			payload = packet[4:]
+		} else if bytes.Equal(headerByte, []byte{0xC0}) {
+			// 1byteのとき
+			pnumber = packet[2:3]
+			payload = packet[3:]
+		}
+	}
+
+	return length, pnumber, payload
 }
 
 // ヘッダ保護を解除したパケットにする
-func UnprotectHeader(commonHeader QuicLongHeader, initpacket InitialPacket, packet, hpkey []byte) interface{} {
+func UnprotectHeader(commonHeader QuicLongHeader, initpacket InitialPacket, packet, hpkey []byte) (interface{}, int) {
 	// https://tex2e.github.io/blog/protocol/quic-initial-packet-decrypt
 	// RFC9001 5.4.2. ヘッダー保護のサンプル
 	// Packet Numberの0byte目があるoffset
@@ -152,7 +153,7 @@ func UnprotectHeader(commonHeader QuicLongHeader, initpacket InitialPacket, pack
 	pnOffset += len(initpacket.Token) + len(initpacket.TokenLength)
 	sampleOffset := pnOffset + 4
 
-	//fmt.Printf("pnOffset is %d, sampleOffset is %d\n", pnOffset, sampleOffset)
+	fmt.Printf("pnOffset is %d, sampleOffset is %d\n", pnOffset, sampleOffset)
 	block, err := aes.NewCipher(hpkey)
 	if err != nil {
 		log.Fatalf("header unprotect error : %v\n", err)
@@ -215,12 +216,12 @@ func DecryptQuicPayload(packetNumber, header, payload []byte, keyblock QuicKeyBl
 	// パケット番号で8byteのnonceにする
 	packetnum := extendArrByZero(packetNumber, len(keyblock.ServerIV))
 
-	block, _ := aes.NewCipher(keyblock.ServerKey)
+	block, _ := aes.NewCipher(keyblock.ClientKey)
 	aesgcm, _ := cipher.NewGCM(block)
 	// IVとxorしたのをnonceにする
 	//nonce := getXORNonce(packetnum, keyblock.ClientIV)
 	for i, _ := range packetnum {
-		packetnum[i] ^= keyblock.ServerIV[i]
+		packetnum[i] ^= keyblock.ClientIV[i]
 	}
 	// 復号する
 	plaintext, err := aesgcm.Open(nil, packetnum, payload, header)
@@ -366,8 +367,7 @@ func NewQuicCryptoFrame(data []byte) CryptoFrames {
 	}
 }
 
-func SendQuicPacket(data []byte, server []byte, port int) interface{} {
-	var packet interface{}
+func SendQuicPacket(data []byte, server []byte, port int) (interface{}, int) {
 	recvBuf := make([]byte, 1500)
 
 	serverinfo := net.UDPAddr{
@@ -382,9 +382,9 @@ func SendQuicPacket(data []byte, server []byte, port int) interface{} {
 	conn.Write(data)
 	n, _ := conn.Read(recvBuf)
 	fmt.Printf("recv packet : %x\n", recvBuf[0:n])
-	packet = ParseRawQuicPacket(recvBuf[0:n], false)
+	packet, packetType := ParseRawQuicPacket(recvBuf[0:n], false)
 
-	return packet
+	return packet, packetType
 }
 
 // paddingフレームを読み飛ばして、QUICのフレームを配列に入れて返す

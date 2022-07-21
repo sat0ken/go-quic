@@ -59,8 +59,7 @@ type QuicRawPacket struct {
 }
 
 type QuicLongHeader struct {
-	HeaderByte []byte
-	//PacketType         int
+	HeaderByte         []byte
 	Version            []byte
 	DestConnIDLength   []byte
 	DestConnID         []byte
@@ -81,6 +80,13 @@ type RetryPacket struct {
 	LongHeader         QuicLongHeader
 	RetryToken         []byte
 	RetryIntergrityTag []byte
+}
+
+type HandshakePacket struct {
+	LongHeader   QuicLongHeader
+	Length       []byte
+	PacketNumber []byte
+	Payload      []byte
 }
 
 type CryptoFrames struct {

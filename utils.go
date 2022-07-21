@@ -188,15 +188,13 @@ func sumByteArr(arr []byte) uint {
 // 各構造体のフィールドが持つbyteをflatな配列にする
 func toByteArr(value interface{}) []byte {
 	rv := reflect.ValueOf(value)
-	//rt := rv.Type()
 	var arr []byte
 
 	for i := 0; i < rv.NumField(); i++ {
-		//field := rt.Field(i)
-		//fmt.Printf("%s\n", reflect.TypeOf(i).Kind())
-
-		b := rv.Field(i).Interface().([]byte)
-		arr = append(arr, b...)
+		if reflect.Slice == rv.Field(i).Kind() {
+			b := rv.Field(i).Interface().([]byte)
+			arr = append(arr, b...)
+		}
 	}
 
 	return arr
