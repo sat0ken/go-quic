@@ -233,3 +233,7 @@ func UintTo4byte(data uint32) []byte {
 func ToPacket(value interface{}) []byte {
 	return toByteArr(value)
 }
+
+func PrintPacket(packet []byte, str string) {
+	fmt.Printf("%s is %x\n", str, packet)
+}

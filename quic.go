@@ -48,10 +48,13 @@ func ParseRawQuicPacket(packet []byte, protected bool) (rawpacket interface{}, p
 			// packetを縮める
 			packet = packet[1:]
 		} else {
+			//fmt.Println("tokenがあるよ")
 			initPacket.TokenLength = packet[0:1]
-			initPacket.Token = packet[:1+int(initPacket.TokenLength[0])]
+			//initPacket.TokenLength = DecodeVariableInt([]int{int(packet[0]), int(packet[1])})
+			tokenLength := sumByteArr(DecodeVariableInt([]int{int(packet[0]), int(packet[1])}))
+			initPacket.Token = packet[2 : 2+tokenLength]
 			// packetを縮める
-			packet = packet[1+int(initPacket.TokenLength[0]):]
+			packet = packet[2+tokenLength:]
 		}
 		// Length~を処理
 		initPacket.Length, initPacket.PacketNumber, initPacket.Payload = ReadPacketLengthNumberPayload(
@@ -144,13 +147,11 @@ func ReadPacketLengthNumberPayload(packet, headerByte []byte, protected bool) (l
 	return length, pnumber, payload
 }
 
-// ヘッダ保護を解除したパケットにする
-func UnprotectHeader(commonHeader QuicLongHeader, initpacket InitialPacket, packet, hpkey []byte) (interface{}, int) {
+// UnprotectHeader ヘッダ保護を解除したパケットにする
+func UnprotectHeader(pnOffset int, packet, hpkey []byte) (interface{}, int) {
 	// https://tex2e.github.io/blog/protocol/quic-initial-packet-decrypt
 	// RFC9001 5.4.2. ヘッダー保護のサンプル
 	// Packet Numberの0byte目があるoffset
-	pnOffset := 7 + len(commonHeader.DestConnID) + len(commonHeader.SourceConnID) + len(initpacket.Length)
-	pnOffset += len(initpacket.Token) + len(initpacket.TokenLength)
 	sampleOffset := pnOffset + 4
 
 	fmt.Printf("pnOffset is %d, sampleOffset is %d\n", pnOffset, sampleOffset)
@@ -175,14 +176,13 @@ func UnprotectHeader(commonHeader QuicLongHeader, initpacket InitialPacket, pack
 	for i, _ := range a {
 		packet[pnOffset+i] = a[i]
 	}
+
 	return ParseRawQuicPacket(packet, false)
 }
 
-// ヘッダ保護をしたパケットにする
-func ProtectHeader(commonHeader QuicLongHeader, initpacket InitialPacket, packet, hpkey []byte) []byte {
+// ProtectHeader パケットのヘッダを保護する
+func ProtectHeader(pnOffset int, packet, hpkey []byte) []byte {
 	// RFC9001 5.4.2. ヘッダー保護のサンプル
-	pnOffset := 7 + len(commonHeader.DestConnID) + len(commonHeader.SourceConnID) + len(initpacket.Length)
-	pnOffset += len(initpacket.Token) + len(initpacket.TokenLength)
 	sampleOffset := pnOffset + 4
 
 	fmt.Printf("pnOffset is %d, sampleOffset is %d\n", pnOffset, sampleOffset)
@@ -191,7 +191,6 @@ func ProtectHeader(commonHeader QuicLongHeader, initpacket InitialPacket, packet
 		log.Fatalf("protect header err : %v\n", err)
 	}
 	sample := packet[sampleOffset : sampleOffset+16]
-	fmt.Printf("sample is %x\n", sample)
 	encsample := make([]byte, len(sample))
 	block.Encrypt(encsample, sample)
 
@@ -280,7 +279,53 @@ func ParseQuicFrame(packet []byte) (frame []interface{}) {
 	return frame
 }
 
-func NewQuicLongHeader(destConnID, sourceConnID []byte, pnum, pnumlen uint) (QuicLongHeader, InitialPacket) {
+//func NewQuicLongHeader(destConnID, sourceConnID []byte, pnum, pnumlen uint) (QuicLongHeader, InitialPacket) {
+//	// とりあえず2byte
+//	var packetNum []byte
+//	if pnumlen == 2 {
+//		packetNum = UintTo2byte(uint16(pnum))
+//	} else if pnumlen == 4 {
+//		packetNum = UintTo4byte(uint32(pnum))
+//	}
+//
+//	// パケット番号長が2byteの場合0xC1になる
+//	// 先頭の6bitは110000, 下位の2bitがLenghtを表す
+//	// 1 LongHeader
+//	//  1 Fixed bit
+//	//   00 Packet Type
+//	//     00 Reserved
+//	// 17.2. Long Header Packets
+//	// That is, the length of the Packet Number field is the value of this field plus one.
+//	// 生成するときは1をパケット番号長から引く、2-1は1、2bitの2進数で表すと01
+//	// 11000001 = 0xC1 となる
+//	var firstByte byte
+//	if len(packetNum) == 2 {
+//		firstByte = 0xC1
+//	} else if len(packetNum) == 4 {
+//		firstByte = 0xC3
+//	}
+//	// Headerを作る
+//	commonHeader := QuicLongHeader{
+//		HeaderByte:       []byte{firstByte},
+//		Version:          []byte{0x00, 0x00, 0x00, 0x01},
+//		DestConnIDLength: []byte{byte(len(destConnID))},
+//		DestConnID:       destConnID,
+//	}
+//	// source connectio id をセット
+//	if sourceConnID == nil {
+//		commonHeader.SourceConnIDLength = []byte{0x00}
+//	} else {
+//		commonHeader.SourceConnIDLength = []byte{byte(len(sourceConnID))}
+//		commonHeader.SourceConnID = sourceConnID
+//	}
+//
+//	return commonHeader, InitialPacket{
+//		TokenLength:  []byte{0x00},
+//		PacketNumber: packetNum,
+//	}
+//}
+
+func (*InitialPacket) NewInitialPacket(destConnID, sourceConnID, token []byte, pnum, pnumlen uint) InitialPacket {
 	// とりあえず2byte
 	var packetNum []byte
 	if pnumlen == 2 {
@@ -320,10 +365,21 @@ func NewQuicLongHeader(destConnID, sourceConnID []byte, pnum, pnumlen uint) (Qui
 		commonHeader.SourceConnID = sourceConnID
 	}
 
-	return commonHeader, InitialPacket{
-		TokenLength:  []byte{0x00},
-		PacketNumber: packetNum,
+	var initPacket InitialPacket
+	initPacket.LongHeader = commonHeader
+	// トークンをセット
+	// トークンがnilならLengthに0だけをセットする
+	// トークンがあれば可変長整数でトークンの長さをLengthにセットしてトークンをセットする
+	if token == nil {
+		initPacket.TokenLength = []byte{0x00}
+	} else {
+		initPacket.TokenLength = EncodeVariableInt(len(token))
+		initPacket.Token = token
 	}
+	// packet numberをセット
+	initPacket.PacketNumber = packetNum
+
+	return initPacket
 }
 
 // RFC9000 A.1. サンプル可変長整数デコード

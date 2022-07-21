@@ -18,9 +18,11 @@ func initpacket() {
 
 	destconnID := quic.StrtoByte("b03b5b77b69a08c92070a495c00e00f9")
 	keyblock := quic.CreateQuicInitialSecret(destconnID)
-	header, initPacket := quic.NewQuicLongHeader(destconnID, nil, 0, 2)
+	//header, initPacket := quic.NewQuicLongHeader(destconnID, nil, 0, 2)
+	var initPacket quic.InitialPacket
+	initPacket = initPacket.NewInitialPacket(destconnID, nil, nil, 0, 2)
 
-	paddingLength := 1252 - len(quic.ToPacket(header)) -
+	paddingLength := 1252 - len(quic.ToPacket(initPacket.LongHeader)) -
 		len(initPacket.PacketNumber) - len(cryptoFrame) - 16 - 4
 
 	// ゼロ埋めしてPayloadをセット
@@ -33,7 +35,7 @@ func initpacket() {
 	// 可変長整数のエンコードをしてLengthをセット
 	initPacket.Length = quic.EncodeVariableInt(length)
 
-	headerByte := quic.ToPacket(header)
+	headerByte := quic.ToPacket(initPacket.LongHeader)
 	// set Token Length
 	headerByte = append(headerByte, 0x00)
 	headerByte = append(headerByte, initPacket.Length...)
@@ -47,8 +49,8 @@ func initpacket() {
 	packet := headerByte
 	packet = append(packet, enctext...)
 
-	fmt.Printf("header is %x, %+v\n", quic.ToPacket(header), header)
-	protectPacket := quic.ProtectHeader(header, initPacket, packet, keyblock.ClientHeaderProtection)
+	//fmt.Printf("header is %x, %+v\n", quic.ToPacket(header), header)
+	protectPacket := quic.ProtectHeader(len(headerByte)-2, packet, keyblock.ClientHeaderProtection)
 	// ヘッダとデータで送信するパケットを生成
 	fmt.Printf("packet is %x\n", protectPacket)
 
@@ -65,12 +67,14 @@ func retrypacket() {
 
 	destconnID := quic.StrtoByte("6e19c054")
 	keyblock := quic.CreateQuicInitialSecret(destconnID)
-	header, initPacket := quic.NewQuicLongHeader(destconnID, nil, 1, 2)
+
+	var initPacket quic.InitialPacket
+	initPacket = initPacket.NewInitialPacket(destconnID, nil, nil, 1, 2)
 
 	initPacket.Token = quic.StrtoByte("938238c63dac3ffe79073d1945aa25d4925e7981e4f5b35488cc6367a9d8de8d3f67fa07d1f601d28f29b408cbdf73e7b8aa0821c46cd9bca7452838dffb9a5e21452fe817b4f7e01bb3546528931dcb812b59161c3d9c2ed3b4ebcb8d04d439f9b1b61decaa08315d4a")
 	initPacket.TokenLength = quic.EncodeVariableInt(len(initPacket.Token))
 
-	paddingLength := 1252 - len(quic.ToPacket(header)) -
+	paddingLength := 1252 - len(quic.ToPacket(initPacket.LongHeader)) -
 		len(initPacket.PacketNumber) - len(cryptoFrame) - 16 - 4 - len(initPacket.Token) - 1
 
 	// ゼロ埋めしてPayloadをセット
@@ -82,7 +86,7 @@ func retrypacket() {
 	// 可変長整数のエンコードをしてLengthをセット
 	initPacket.Length = quic.EncodeVariableInt(length)
 
-	headerByte := quic.ToPacket(header)
+	headerByte := quic.ToPacket(initPacket.LongHeader)
 	fmt.Printf("header is %x\n", headerByte)
 	// c100000001046e19c05400
 	//
