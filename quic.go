@@ -152,7 +152,7 @@ func UnprotectHeader(pnOffset int, packet, hpkey []byte) (interface{}, int) {
 	// https://tex2e.github.io/blog/protocol/quic-initial-packet-decrypt
 	// RFC9001 5.4.2. ヘッダー保護のサンプル
 	// Packet Numberの0byte目があるoffset
-	sampleOffset := pnOffset + 4
+	sampleOffset := pnOffset + 2
 
 	fmt.Printf("pnOffset is %d, sampleOffset is %d\n", pnOffset, sampleOffset)
 	block, err := aes.NewCipher(hpkey)
@@ -160,15 +160,19 @@ func UnprotectHeader(pnOffset int, packet, hpkey []byte) (interface{}, int) {
 		log.Fatalf("header unprotect error : %v\n", err)
 	}
 	sample := packet[sampleOffset : sampleOffset+16]
+	//sample := strtoByte("4a5406074c6001fc0086bf5108cdf5e4")
+	PrintPacket(sample, "sample")
 	encsample := make([]byte, len(sample))
 	block.Encrypt(encsample, sample)
 
 	// 保護されているヘッダの最下位4bitを解除する
 	packet[0] ^= encsample[0] & 0x0f
 	pnlength := (packet[0] & 0x03) + 1
-
+	fmt.Printf("packet number length is %d\n", pnlength)
+	PrintPacket(encsample, "encsample")
 	a := packet[pnOffset : pnOffset+int(pnlength)]
 	b := encsample[1 : 1+pnlength]
+	fmt.Printf("a is %x, b is %x\n", a, b)
 	for i, _ := range a {
 		a[i] ^= b[i]
 	}
@@ -176,6 +180,7 @@ func UnprotectHeader(pnOffset int, packet, hpkey []byte) (interface{}, int) {
 	for i, _ := range a {
 		packet[pnOffset+i] = a[i]
 	}
+	PrintPacket(packet[0:50], "after packet")
 
 	return ParseRawQuicPacket(packet, false)
 }
