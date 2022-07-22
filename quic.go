@@ -215,12 +215,12 @@ func DecryptQuicPayload(packetNumber, header, payload []byte, keyblock QuicKeyBl
 	// パケット番号で8byteのnonceにする
 	packetnum := extendArrByZero(packetNumber, len(keyblock.ServerIV))
 
-	block, _ := aes.NewCipher(keyblock.ClientKey)
+	block, _ := aes.NewCipher(keyblock.ServerKey)
 	aesgcm, _ := cipher.NewGCM(block)
 	// IVとxorしたのをnonceにする
 	//nonce := getXORNonce(packetnum, keyblock.ClientIV)
 	for i, _ := range packetnum {
-		packetnum[i] ^= keyblock.ClientIV[i]
+		packetnum[i] ^= keyblock.ServerIV[i]
 	}
 	// 復号する
 	plaintext, err := aesgcm.Open(nil, packetnum, payload, header)
@@ -230,7 +230,8 @@ func DecryptQuicPayload(packetNumber, header, payload []byte, keyblock QuicKeyBl
 	return plaintext
 }
 
-func EncryptQuicPayload(packetNumber, header, payload []byte, keyblock QuicKeyBlock) []byte {
+// EncryptClientPayload payloadをClientKeyで暗号化
+func EncryptClientPayload(packetNumber, header, payload []byte, keyblock QuicKeyBlock) []byte {
 	// パケット番号で12byteのnonceにする
 	packetnum := extendArrByZero(packetNumber, len(keyblock.ClientIV))
 	// clientivとxorする
@@ -239,6 +240,22 @@ func EncryptQuicPayload(packetNumber, header, payload []byte, keyblock QuicKeyBl
 	}
 	// AES-128-GCMで暗号化する
 	block, _ := aes.NewCipher(keyblock.ClientKey)
+	aesgcm, _ := cipher.NewGCM(block)
+	encryptedMessage := aesgcm.Seal(nil, packetnum, payload, header)
+
+	return encryptedMessage
+}
+
+// EncryptServerPayload payloadをServerKeyで暗号化(動作確認で使うだけ)
+func EncryptServerPayload(packetNumber, header, payload []byte, keyblock QuicKeyBlock) []byte {
+	// パケット番号で12byteのnonceにする
+	packetnum := extendArrByZero(packetNumber, len(keyblock.ServerIV))
+	// clientivとxorする
+	for i, _ := range packetnum {
+		packetnum[i] ^= keyblock.ServerIV[i]
+	}
+	// AES-128-GCMで暗号化する
+	block, _ := aes.NewCipher(keyblock.ServerKey)
 	aesgcm, _ := cipher.NewGCM(block)
 	encryptedMessage := aesgcm.Seal(nil, packetnum, payload, header)
 
@@ -279,52 +296,6 @@ func ParseQuicFrame(packet []byte) (frame []interface{}) {
 	return frame
 }
 
-//func NewQuicLongHeader(destConnID, sourceConnID []byte, pnum, pnumlen uint) (QuicLongHeader, InitialPacket) {
-//	// とりあえず2byte
-//	var packetNum []byte
-//	if pnumlen == 2 {
-//		packetNum = UintTo2byte(uint16(pnum))
-//	} else if pnumlen == 4 {
-//		packetNum = UintTo4byte(uint32(pnum))
-//	}
-//
-//	// パケット番号長が2byteの場合0xC1になる
-//	// 先頭の6bitは110000, 下位の2bitがLenghtを表す
-//	// 1 LongHeader
-//	//  1 Fixed bit
-//	//   00 Packet Type
-//	//     00 Reserved
-//	// 17.2. Long Header Packets
-//	// That is, the length of the Packet Number field is the value of this field plus one.
-//	// 生成するときは1をパケット番号長から引く、2-1は1、2bitの2進数で表すと01
-//	// 11000001 = 0xC1 となる
-//	var firstByte byte
-//	if len(packetNum) == 2 {
-//		firstByte = 0xC1
-//	} else if len(packetNum) == 4 {
-//		firstByte = 0xC3
-//	}
-//	// Headerを作る
-//	commonHeader := QuicLongHeader{
-//		HeaderByte:       []byte{firstByte},
-//		Version:          []byte{0x00, 0x00, 0x00, 0x01},
-//		DestConnIDLength: []byte{byte(len(destConnID))},
-//		DestConnID:       destConnID,
-//	}
-//	// source connectio id をセット
-//	if sourceConnID == nil {
-//		commonHeader.SourceConnIDLength = []byte{0x00}
-//	} else {
-//		commonHeader.SourceConnIDLength = []byte{byte(len(sourceConnID))}
-//		commonHeader.SourceConnID = sourceConnID
-//	}
-//
-//	return commonHeader, InitialPacket{
-//		TokenLength:  []byte{0x00},
-//		PacketNumber: packetNum,
-//	}
-//}
-
 func (*InitialPacket) NewInitialPacket(destConnID, sourceConnID, token []byte, pnum, pnumlen uint) InitialPacket {
 	// とりあえず2byte
 	var packetNum []byte
@@ -351,7 +322,7 @@ func (*InitialPacket) NewInitialPacket(destConnID, sourceConnID, token []byte, p
 		firstByte = 0xC3
 	}
 	// Headerを作る
-	commonHeader := QuicLongHeader{
+	longHeader := QuicLongHeader{
 		HeaderByte:       []byte{firstByte},
 		Version:          []byte{0x00, 0x00, 0x00, 0x01},
 		DestConnIDLength: []byte{byte(len(destConnID))},
@@ -359,14 +330,14 @@ func (*InitialPacket) NewInitialPacket(destConnID, sourceConnID, token []byte, p
 	}
 	// source connectio id をセット
 	if sourceConnID == nil {
-		commonHeader.SourceConnIDLength = []byte{0x00}
+		longHeader.SourceConnIDLength = []byte{0x00}
 	} else {
-		commonHeader.SourceConnIDLength = []byte{byte(len(sourceConnID))}
-		commonHeader.SourceConnID = sourceConnID
+		longHeader.SourceConnIDLength = []byte{byte(len(sourceConnID))}
+		longHeader.SourceConnID = sourceConnID
 	}
 
 	var initPacket InitialPacket
-	initPacket.LongHeader = commonHeader
+	initPacket.LongHeader = longHeader
 	// トークンをセット
 	// トークンがnilならLengthに0だけをセットする
 	// トークンがあれば可変長整数でトークンの長さをLengthにセットしてトークンをセットする
@@ -380,6 +351,45 @@ func (*InitialPacket) NewInitialPacket(destConnID, sourceConnID, token []byte, p
 	initPacket.PacketNumber = packetNum
 
 	return initPacket
+}
+
+func (*HandshakePacket) NewHandshakePacket(destConnID, sourceConnID []byte, pnum, pnumlen uint) HandshakePacket {
+	// とりあえず2byte
+	var packetNum []byte
+	if pnumlen == 2 {
+		packetNum = UintTo2byte(uint16(pnum))
+	} else if pnumlen == 4 {
+		packetNum = UintTo4byte(uint32(pnum))
+	}
+
+	var firstByte byte
+	if len(packetNum) == 2 {
+		firstByte = 0xC1
+	} else if len(packetNum) == 4 {
+		firstByte = 0xC3
+	}
+	// Headerを作る
+	longHeader := QuicLongHeader{
+		HeaderByte: []byte{firstByte},
+		Version:    []byte{0x00, 0x00, 0x00, 0x01},
+	}
+	// destination connection idをセット
+	if destConnID == nil {
+		longHeader.DestConnIDLength = []byte{0x00}
+	}
+	// source connection id をセット
+	if sourceConnID == nil {
+		longHeader.SourceConnIDLength = []byte{0x00}
+	} else {
+		longHeader.SourceConnIDLength = []byte{byte(len(sourceConnID))}
+		longHeader.SourceConnID = sourceConnID
+	}
+
+	var handshake HandshakePacket
+	handshake.LongHeader = longHeader
+	handshake.PacketNumber = packetNum
+
+	return handshake
 }
 
 // RFC9000 A.1. サンプル可変長整数デコード
