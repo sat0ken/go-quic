@@ -199,22 +199,26 @@ type ECDHEKeys struct {
 }
 
 type KeyBlockTLS13 struct {
-	handshakeSecret       []byte
-	clientHandshakeSecret []byte
-	clientHandshakeKey    []byte
-	clientHandshakeIV     []byte
+	HandshakeSecret       []byte
+	ClientHandshakeSecret []byte
+	ClientHandshakeKey    []byte
+	ClientHandshakeHPKey  []byte //Handshake PacketののHeader Protection用に追加
+	ClientHandshakeIV     []byte
 	ClientFinishedKey     []byte
-	serverHandshakeSecret []byte
-	serverHandshakeKey    []byte
-	serverHandshakeIV     []byte
+	ServerHandshakeSecret []byte
+	ServerHandshakeKey    []byte
+	ServerHandshakeHPKey  []byte //Handshake PacketののHeader Protection用に追加
+	ServerHandshakeIV     []byte
 	ServerFinishedKey     []byte
-	masterSecret          []byte
-	clientAppSecret       []byte
-	clientAppKey          []byte
-	clientAppIV           []byte
-	serverAppSecret       []byte
-	serverAppKey          []byte
-	serverAppIV           []byte
+	MasterSecret          []byte
+	ClientAppSecret       []byte
+	ClientAppKey          []byte
+	ClientAppHPKey        []byte
+	ClientAppIV           []byte
+	ServerAppSecret       []byte
+	ServerAppKey          []byte
+	ServerAppHPKey        []byte
+	ServerAppIV           []byte
 }
 
 type EncryptedExtensions struct {

@@ -93,7 +93,6 @@ func decryptTestInit() {
 	destconnID := quic.StrtoByte("6e19c054")
 	// destination connection id からキーを生成する
 	keyblock := quic.CreateQuicInitialSecret(destconnID)
-	_ = keyblock
 
 	// InitialパケットのACKとCRYPTO(ServerHello)
 	resultProtectedPacket := quic.StrtoByte("c900000001000442523d4f00407561383ddbedbcdd8cb03add8008e3d3bb0a6be69a979cdba213652ac3157bc85659996d86c394e6131a2ee8dbc383b3d1c2bda195f3b01b9b99260ef27adea0c8ff486043140ec55b0d93e0904ae41c594e0ce8ee793dcf1b49046ea66ef86fdb6632acf575003c8393279322c6e232ae17df526fba")

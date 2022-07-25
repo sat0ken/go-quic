@@ -152,7 +152,7 @@ func UnprotectHeader(pnOffset int, packet, hpkey []byte) (interface{}, int) {
 	// https://tex2e.github.io/blog/protocol/quic-initial-packet-decrypt
 	// RFC9001 5.4.2. ヘッダー保護のサンプル
 	// Packet Numberの0byte目があるoffset
-	sampleOffset := pnOffset + 2
+	sampleOffset := pnOffset + 4
 
 	fmt.Printf("pnOffset is %d, sampleOffset is %d\n", pnOffset, sampleOffset)
 	block, err := aes.NewCipher(hpkey)
@@ -160,7 +160,6 @@ func UnprotectHeader(pnOffset int, packet, hpkey []byte) (interface{}, int) {
 		log.Fatalf("header unprotect error : %v\n", err)
 	}
 	sample := packet[sampleOffset : sampleOffset+16]
-	//sample := strtoByte("4a5406074c6001fc0086bf5108cdf5e4")
 	PrintPacket(sample, "sample")
 	encsample := make([]byte, len(sample))
 	block.Encrypt(encsample, sample)
@@ -227,6 +226,7 @@ func DecryptQuicPayload(packetNumber, header, payload []byte, keyblock QuicKeyBl
 	for i, _ := range packetnum {
 		packetnum[i] ^= keyblock.ServerIV[i]
 	}
+	PrintPacket(packetnum, "decrypto nonce")
 	// 復号する
 	plaintext, err := aesgcm.Open(nil, packetnum, payload, header)
 	if err != nil {
