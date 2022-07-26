@@ -226,8 +226,9 @@ func DecryptQuicPayload(packetNumber, header, payload []byte, keyblock QuicKeyBl
 	for i, _ := range packetnum {
 		packetnum[i] ^= keyblock.ServerIV[i]
 	}
-	PrintPacket(packetnum, "decrypto nonce")
 	// 復号する
+	//fmt.Printf("nonce is %x, add is %x, payload is %x\n", packetnum, header, payload)
+	fmt.Printf("nonce is %x, header is %x\n", packetnum, header)
 	plaintext, err := aesgcm.Open(nil, packetnum, payload, header)
 	if err != nil {
 		log.Fatalf("DecryptQuicPayload is error : %v\n", err)
