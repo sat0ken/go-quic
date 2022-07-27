@@ -219,7 +219,7 @@ func ParseTLSExtensions(extPacket []byte) (tlsEx []TLSExtensions) {
 				},
 			})
 			// packetを縮める
-			extPacket = extPacket[6:]
+			extPacket = extPacket[40:]
 			i = 0
 		case TLSExtALPN:
 			alpnExt := TLSExtensions{
@@ -227,30 +227,70 @@ func ParseTLSExtensions(extPacket []byte) (tlsEx []TLSExtensions) {
 				Length: extPacket[2:4],
 			}
 			alpn := ALPNProtocol{
-				StringLength: extPacket[4:5],
+				ALPNExtLength: extPacket[4:6],
+				StringLength:  extPacket[6:7],
 			}
-			alpn.NextProtocol = extPacket[5 : 5+alpn.StringLength[0]]
+			alpn.NextProtocol = extPacket[7 : 7+alpn.StringLength[0]]
 			alpnExt.Value = alpn
 			tlsEx = append(tlsEx, alpnExt)
 			// packetを縮める
-			extPacket = extPacket[:5+alpn.StringLength[0]]
+			extPacket = extPacket[7+alpn.StringLength[0]:]
 			i = 0
 		case TLSExtQuicTP:
 			quicTps := TLSExtensions{
 				Type:   extPacket[0:2],
 				Length: extPacket[2:4],
 			}
-			//quicTps.Value = ParseQuicTransportPrameters(extPacket[4 : 4+sumByteArr(quicTps.Length)])
+			quicTps.Value = ParseQuicTransportPrameters(extPacket[4 : 4+sumByteArr(quicTps.Length)])
 			tlsEx = append(tlsEx, quicTps)
+			// packetを縮める
+			extPacket = extPacket[4+sumByteArr(quicTps.Length):]
+			i = 0
 		}
 	}
 	return tlsEx
 }
 
+func checkQuicTransportPram(id byte) bool {
+	for _, v := range quicTransportPrameter {
+		if int(id) == v {
+			//fmt.Printf("quic transport parameter type is %s\n", k)
+			return true
+		}
+	}
+	return false
+}
+
 func ParseQuicTransportPrameters(packet []byte) (quicPrams []QuicParameters) {
-	// TODO 最初にTYPEがGREASEがチェックする
-	// quic transport paramertersのValueはハッシュで持った方がよさそう
-	// →そうしたほうがValueが存在するかのチェックが簡単
-	// TYPEが存在しなければGREASEと見なせる
-	return nil
+
+	for i := 0; i < len(packet); i++ {
+		if checkQuicTransportPram(packet[0]) {
+			param := QuicParameters{
+				Type:   packet[0:1],
+				Length: packet[1:2],
+			}
+			param.Value = packet[2 : 2+param.Length[0]]
+			quicPrams = append(quicPrams, param)
+			// packetを縮める
+			packet = packet[2+int(param.Length[0]):]
+			i = 0
+		} else {
+			// GREASEを処理する
+			// typeで定義されてなければGREASEとみなす（面倒くさいから）
+			// https://datatracker.ietf.org/doc/html/draft-ietf-quic-bit-grease#section-3
+			// The QUIC Bit is defined as the second-to-most significant bit of the first
+			// byte of QUIC packets (that is, the value 0x40).
+			// と書いてあるから0byte目が0x40以上ならGREASEと判断し、可変長整数デコードしてチェックするのが正しそう？（面倒くさい）
+			param := QuicParameters{
+				Type:   packet[0:2],
+				Length: packet[2:3],
+			}
+			param.Value = packet[3 : 3+param.Length[0]]
+			quicPrams = append(quicPrams, param)
+			// packetを縮める
+			packet = packet[3+int(param.Length[0]):]
+			i = 0
+		}
+	}
+	return quicPrams
 }

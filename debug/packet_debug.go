@@ -60,6 +60,11 @@ func _() {
 }
 
 func main() {
+	params := quic.ParseTLSExtensions(quic.StrtoByte("002b0002030400330024001d00202fe57da347cd62431528daac5fbb290730fff684afc4cfc2ed90995f58cb3b74"))
+	fmt.Printf("%+v\n", params)
+}
+
+func _() {
 	fmt.Println("--- decryptHandshake ---")
 	destconnID := quic.StrtoByte("5306bcce")
 	// destination connection id からキーを生成する

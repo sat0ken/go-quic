@@ -269,8 +269,9 @@ type KeyShareExtension struct {
 }
 
 type ALPNProtocol struct {
-	StringLength []byte
-	NextProtocol []byte
+	ALPNExtLength []byte
+	StringLength  []byte
+	NextProtocol  []byte
 }
 
 type QuicParameters struct {

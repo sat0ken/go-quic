@@ -17,33 +17,34 @@ const (
 
 // https://www.iana.org/assignments/quic/quic.xhtml
 // quic trasnsport parameters type
-const (
-	originalDistinationConnectionID    = 0x00
-	maxIdleTimeOut                     = 0x01
-	statelessResetToken                = 0x02
-	maxUDPPayloadSize                  = 0x03
-	initialMaxDataType                 = 0x04
-	initialMaxStreamDataBidiLocalType  = 0x05
-	initialMaxStreamDataBidiRemoteType = 0x06
-	initialMaxStreamDataUniType        = 0x07
-	initialMaxStreamsBidiType          = 0x08
-	initialMaxStreamsUniType           = 0x09
-	ackDelayExponent                   = 0x0a
-	maxAckDelay                        = 0x0b
-	disableActiveMigrationType         = 0x0c
-	preferredAddress                   = 0x0d
-	activeConnectionIdLimitType        = 0x0e
-	initialSourceConnectionID          = 0x0f
-	retrySourceConnectionID            = 0x10
-	maxDatagramFrameSizeType           = 0x11
-	discard                            = 0x173e
-	greaseBit                          = 0x2ab2
-	initialRtt                         = 0x3127
-	googleConnectionOptions            = 0x3128
-	userAgent                          = 0x3129
-	googleVersion                      = 0x3130
-	versionInformation                 = 0xFF73DB
-)
+var quicTransportPrameter = map[string]int{
+	"originalDistinationConnectionID": 0x00,
+	"maxIdleTimeOut":                  0x01,
+	"statelessResetToken":             0x02,
+	"maxUDPPayloadSize":               0x03,
+	"initialMaxDataType":              0x04,
+	"initialMaxStreamDataBidiLocal":   0x05,
+	"initialMaxStreamDataBidiRemote":  0x06,
+	"initialMaxStreamDataUni":         0x07,
+	"initialMaxStreamsBidi":           0x08,
+	"initialMaxStreamsUni":            0x09,
+	"ackDelayExponent":                0x0a,
+	"maxAckDelay":                     0x0b,
+	"disableActiveMigration":          0x0c,
+	"preferredAddress":                0x0d,
+	"activeConnectionIdLimit":         0x0e,
+	"initialSourceConnectionID":       0x0f,
+	"retrySourceConnectionID":         0x10,
+	"maxDatagramFrameSize":            0x20,
+	//TODO: ここから下はいるのか？ quic-goはまでmaxDatagramFrameSizeしか定義してないな
+	//"discard":                            0x173e,
+	//"greaseBit":                          0x2ab2,
+	//"initialRtt":                         0x3127,
+	//"googleConnectionOptions":            0x3128,
+	//"userAgent":                          0x3129,
+	//"googleVersion":                      0x3130,
+	//"versionInformation":                 0xFF73DB,
+}
 
 var initialSalt = []byte{
 	0x38, 0x76, 0x2c, 0xf7, 0xf5, 0x59, 0x34, 0xb3, 0x4d, 0x17,
