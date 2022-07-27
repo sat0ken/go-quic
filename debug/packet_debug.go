@@ -100,6 +100,9 @@ func main() {
 	}
 	fmt.Printf("server key is %x\n", serverkey.ServerKey)
 	plain := quic.DecryptQuicPayload(handshake.PacketNumber, headerByte, handshake.Payload, serverkey)
-	quic.PrintPacket(plain, "plain text")
+
+	frames := quic.ParseQuicFrame(plain)[0].(quic.CryptoFrames)
+
+	fmt.Printf("frames : %x\n", frames.Data)
 
 }

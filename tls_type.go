@@ -23,6 +23,10 @@ const (
 	CurveIDx25519                    = 0x1D
 	TLSExtSupportedVersions          = 0x2b
 	TLSExtKeyShare                   = 0x33
+	// application_layer_protocol_negotiation = 16
+	TLSExtALPN = 0x10
+	// quic_transport_parameters = 57
+	TLSExtQuicTP = 0x39
 
 	// 4.4.3. Certificate Verify
 	str0x20x64 = "20202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020"
@@ -262,4 +266,19 @@ type KeyShareExtension struct {
 	Group             []byte
 	KeyExchangeLength []byte
 	KeyExchange       []byte
+}
+
+type ALPNProtocol struct {
+	StringLength []byte
+	NextProtocol []byte
+}
+
+type QuicParameters struct {
+	Type   []byte
+	Length []byte
+	Value  []byte
+}
+
+type QuicTransPortPrameters struct {
+	QuiParams []QuicParameters
 }

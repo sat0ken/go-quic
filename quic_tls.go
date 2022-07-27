@@ -164,6 +164,14 @@ func ParseTLSHandshake(packet []byte) interface{} {
 			TLSExtensions:     ParseTLSExtensions(packet[44:]),
 		}
 		i = hello
+	case HandshakeTypeEncryptedExtensions:
+		encExt := EncryptedExtensions{
+			HandshakeType:   packet[0:1],
+			Length:          packet[1:4],
+			ExtensionLength: packet[4:6],
+			TLSExtensions:   ParseTLSExtensions(packet[6:]),
+		}
+		i = encExt
 	}
 
 	return i
@@ -211,6 +219,17 @@ func ParseTLSExtensions(extPacket []byte) (tlsEx []TLSExtensions) {
 			})
 			extPacket = extPacket[6:]
 			i = 0
+		case TLSExtALPN:
+			tlsEx = append(tlsEx, TLSExtensions{
+				Type:   extPacket[0:2],
+				Length: extPacket[2:4],
+			})
+			alpn := ALPNProtocol{
+				StringLength: extPacket[4:5],
+			}
+			alpn.NextProtocol = extPacket[5 : 5+alpn.StringLength[0]]
+		case TLSExtQuicTP:
+
 		}
 	}
 	return tlsEx
