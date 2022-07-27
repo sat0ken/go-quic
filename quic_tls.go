@@ -205,6 +205,7 @@ func ParseTLSExtensions(extPacket []byte) (tlsEx []TLSExtensions) {
 					Version: extPacket[4:6],
 				},
 			})
+			// packetを縮める
 			extPacket = extPacket[6:]
 			i = 0
 		case TLSExtKeyShare:
@@ -217,20 +218,39 @@ func ParseTLSExtensions(extPacket []byte) (tlsEx []TLSExtensions) {
 					KeyExchange:       extPacket[8:40],
 				},
 			})
+			// packetを縮める
 			extPacket = extPacket[6:]
 			i = 0
 		case TLSExtALPN:
-			tlsEx = append(tlsEx, TLSExtensions{
+			alpnExt := TLSExtensions{
 				Type:   extPacket[0:2],
 				Length: extPacket[2:4],
-			})
+			}
 			alpn := ALPNProtocol{
 				StringLength: extPacket[4:5],
 			}
 			alpn.NextProtocol = extPacket[5 : 5+alpn.StringLength[0]]
+			alpnExt.Value = alpn
+			tlsEx = append(tlsEx, alpnExt)
+			// packetを縮める
+			extPacket = extPacket[:5+alpn.StringLength[0]]
+			i = 0
 		case TLSExtQuicTP:
-
+			quicTps := TLSExtensions{
+				Type:   extPacket[0:2],
+				Length: extPacket[2:4],
+			}
+			//quicTps.Value = ParseQuicTransportPrameters(extPacket[4 : 4+sumByteArr(quicTps.Length)])
+			tlsEx = append(tlsEx, quicTps)
 		}
 	}
 	return tlsEx
+}
+
+func ParseQuicTransportPrameters(packet []byte) (quicPrams []QuicParameters) {
+	// TODO 最初にTYPEがGREASEがチェックする
+	// quic transport paramertersのValueはハッシュで持った方がよさそう
+	// →そうしたほうがValueが存在するかのチェックが簡単
+	// TYPEが存在しなければGREASEと見なせる
+	return nil
 }

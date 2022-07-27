@@ -278,7 +278,3 @@ type QuicParameters struct {
 	Length []byte
 	Value  []byte
 }
-
-type QuicTransPortPrameters struct {
-	QuiParams []QuicParameters
-}
