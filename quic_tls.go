@@ -2,6 +2,7 @@ package quic
 
 import (
 	"crypto/tls"
+	"fmt"
 )
 
 func (*ClientHello) NewQuicClientHello(sourceConnID, hostname []byte) (TLSInfo, []byte) {
@@ -147,34 +148,56 @@ func setQuicTLSExtension(hostname []byte) ([]byte, ECDHEKeys) {
 	return tlsExtension, clientkey
 }
 
-func ParseTLSHandshake(packet []byte) interface{} {
-	var i interface{}
+func ParseTLSHandshake(packet []byte) []interface{} {
+	var handshake []interface{}
 
-	switch packet[0] {
-	case HandshakeTypeServerHello:
-		hello := ServerHello{
-			HandshakeType:     packet[0:1],
-			Length:            packet[1:4],
-			Version:           packet[4:6],
-			Random:            packet[6:38],
-			SessionIDLength:   packet[38:39],
-			CipherSuites:      packet[39:41],
-			CompressionMethod: packet[41:42],
-			ExtensionLength:   packet[42:44],
-			TLSExtensions:     ParseTLSExtensions(packet[44:]),
+	//引き算で残りゼロバイトになるまでforを回すようにする
+	for i := 0; i < len(packet); i++ {
+		switch packet[0] {
+		case HandshakeTypeServerHello:
+			hello := ServerHello{
+				HandshakeType:     packet[0:1],
+				Length:            packet[1:4],
+				Version:           packet[4:6],
+				Random:            packet[6:38],
+				SessionIDLength:   packet[38:39],
+				CipherSuites:      packet[39:41],
+				CompressionMethod: packet[41:42],
+				ExtensionLength:   packet[42:44],
+				TLSExtensions:     ParseTLSExtensions(packet[44:]),
+			}
+			handshake = append(handshake, hello)
+			// packetを縮める, TLSレコードヘッダの4byte+Length
+			packet = packet[4+sum3BytetoLength(hello.Length):]
+			i = 0
+		case HandshakeTypeEncryptedExtensions:
+			encExt := EncryptedExtensions{
+				HandshakeType:   packet[0:1],
+				Length:          packet[1:4],
+				ExtensionLength: packet[4:6],
+				TLSExtensions:   ParseTLSExtensions(packet[6:]),
+			}
+			handshake = append(handshake, encExt)
+			// packetを縮める, TLSレコードヘッダの4byte+Length
+			packet = packet[4+sum3BytetoLength(encExt.Length):]
+			i = 0
+		case HandshakeTypeCertificate:
+			cert := ServerCertificate{
+				HandshakeType:                    packet[0:1],
+				Length:                           packet[1:4],
+				CertificatesRequestContextLength: packet[4:5],
+				CertificatesLength:               packet[5:8],
+				Certificates:                     readCertificates(packet[8:]),
+			}
+			handshake = append(handshake, cert)
+			// packetを縮める, TLSレコードヘッダの4byte+Length
+			fmt.Printf("packet length is %d, length is %d\n", len(packet), sum3BytetoLength(cert.Length))
+			//packet = packet[4+sum3BytetoLength(cert.Length):]
+			i = 0
 		}
-		i = hello
-	case HandshakeTypeEncryptedExtensions:
-		encExt := EncryptedExtensions{
-			HandshakeType:   packet[0:1],
-			Length:          packet[1:4],
-			ExtensionLength: packet[4:6],
-			TLSExtensions:   ParseTLSExtensions(packet[6:]),
-		}
-		i = encExt
 	}
 
-	return i
+	return handshake
 }
 
 func setServerNameExt(hostname []byte) []byte {

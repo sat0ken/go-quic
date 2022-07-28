@@ -5,6 +5,7 @@ import (
 	"crypto/rsa"
 	"crypto/sha256"
 	"crypto/tls"
+	"crypto/x509"
 	"fmt"
 	"golang.org/x/crypto/chacha20poly1305"
 	"golang.org/x/crypto/curve25519"
@@ -311,4 +312,74 @@ func VerifyServerCertificate(pubkey *rsa.PublicKey, signature, handshake_message
 		log.Fatal(err)
 	}
 	fmt.Println("Server Certificate Verify is OK !!")
+}
+
+func readCertificates(packet []byte) []*x509.Certificate {
+
+	var b []byte
+	var certificates []*x509.Certificate
+
+	//　https://pkg.go.dev/crypto/x509#SystemCertPool
+	// OSにインストールされている証明書を読み込む
+	ospool, err := x509.SystemCertPool()
+	if err != nil {
+		log.Fatalf("get SystemCertPool err : %v\n", err)
+	}
+
+	// TLS Handshak protocolのCertificatesのLengthが0になるまでx509証明書をReadする
+	// 読み込んだx509証明書を配列に入れる
+	length := sum3BytetoLength(packet[0:3])
+	b = packet[3 : length+3]
+	//fmt.Printf("%x\n", b)
+	cert, err := x509.ParseCertificate(b)
+	if err != nil {
+		log.Fatalf("ParseCertificate error : %s", err)
+	}
+	certificates = append(certificates, cert)
+	//for {
+	//	if len(packet) == 0 {
+	//		break
+	//	} else {
+	//		length := sum3BytetoLength(packet[0:3])
+	//		//b := make([]byte, length)
+	//		//b = readByteNum(packet, 3, int64(length))
+	//		b = packet[3 : length+3]
+	//		fmt.Printf("%x\n", b)
+	//		cert, err := x509.ParseCertificate(b)
+	//		if err != nil {
+	//			log.Fatalf("ParseCertificate error : %s", err)
+	//		}
+	//		certificates = append(certificates, cert)
+	//		//byte配列を縮める
+	//		packet = packet[3+length:]
+	//	}
+	//}
+
+	// 証明書を検証する
+	// 配列にはサーバ証明書、中間証明書の順番で格納されているので中間証明書から検証していくので
+	// forloopをdecrementで回す
+	for i := len(certificates) - 1; i >= 0; i-- {
+		var opts x509.VerifyOptions
+		if len(certificates[i].DNSNames) == 0 {
+			opts = x509.VerifyOptions{
+				Roots: ospool,
+			}
+		} else {
+			opts = x509.VerifyOptions{
+				DNSName: certificates[i].DNSNames[0],
+				Roots:   ospool,
+			}
+		}
+
+		// 検証
+		_, err = certificates[i].Verify(opts)
+		if err != nil {
+			log.Printf("failed to verify certificate : %v\n", err)
+		}
+		if 0 < i {
+			ospool.AddCert(certificates[1])
+		}
+	}
+	fmt.Println("証明書マジ正しい！")
+	return certificates
 }
