@@ -12,6 +12,7 @@ import (
 	"golang.org/x/crypto/hkdf"
 	"io"
 	"log"
+	"runtime"
 )
 
 func genrateClientECDHEKey() ECDHEKeys {
@@ -321,9 +322,15 @@ func readCertificates(packet []byte) []*x509.Certificate {
 
 	//　https://pkg.go.dev/crypto/x509#SystemCertPool
 	// OSにインストールされている証明書を読み込む
-	ospool, err := x509.SystemCertPool()
-	if err != nil {
-		log.Fatalf("get SystemCertPool err : %v\n", err)
+	var ospool *x509.CertPool
+	var err error
+	if runtime.GOOS != "windows" {
+		ospool, err = x509.SystemCertPool()
+		if err != nil {
+			log.Fatalf("get SystemCertPool err : %v\n", err)
+		}
+	} else {
+		ospool = x509.NewCertPool()
 	}
 
 	// TLS Handshak protocolのCertificatesのLengthが0になるまでx509証明書をReadする

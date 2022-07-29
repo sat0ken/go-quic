@@ -152,7 +152,7 @@ func ParseTLSHandshake(packet []byte) []interface{} {
 	var handshake []interface{}
 
 	//引き算で残りゼロバイトになるまでforを回すようにする
-	for i := 0; i < len(packet); i++ {
+	for i := len(packet); i >= 0; i-- {
 		switch packet[0] {
 		case HandshakeTypeServerHello:
 			hello := ServerHello{
@@ -169,7 +169,7 @@ func ParseTLSHandshake(packet []byte) []interface{} {
 			handshake = append(handshake, hello)
 			// packetを縮める, TLSレコードヘッダの4byte+Length
 			packet = packet[4+sum3BytetoLength(hello.Length):]
-			i = 0
+			i = i - 4 - int(sum3BytetoLength(hello.Length))
 		case HandshakeTypeEncryptedExtensions:
 			encExt := EncryptedExtensions{
 				HandshakeType:   packet[0:1],
@@ -180,7 +180,8 @@ func ParseTLSHandshake(packet []byte) []interface{} {
 			handshake = append(handshake, encExt)
 			// packetを縮める, TLSレコードヘッダの4byte+Length
 			packet = packet[4+sum3BytetoLength(encExt.Length):]
-			i = 0
+			i = i - 4 - int(sum3BytetoLength(encExt.Length))
+			fmt.Printf("remain packet length is %d\n", i)
 		case HandshakeTypeCertificate:
 			cert := ServerCertificate{
 				HandshakeType:                    packet[0:1],
@@ -191,9 +192,9 @@ func ParseTLSHandshake(packet []byte) []interface{} {
 			}
 			handshake = append(handshake, cert)
 			// packetを縮める, TLSレコードヘッダの4byte+Length
-			fmt.Printf("packet length is %d, length is %d\n", len(packet), sum3BytetoLength(cert.Length))
-			//packet = packet[4+sum3BytetoLength(cert.Length):]
-			i = 0
+			packet = packet[4+sum3BytetoLength(cert.Length):]
+			i = i - 4 - int(sum3BytetoLength(cert.Length))
+			fmt.Printf("packet length is %d, length is %d\n", len(packet), i)
 		}
 	}
 
