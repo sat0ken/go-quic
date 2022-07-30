@@ -374,7 +374,7 @@ func readCertificates(packet []byte) []*x509.Certificate {
 		// 検証
 		_, err = certificates[i].Verify(opts)
 		if err != nil {
-			log.Printf("failed to verify certificate : %v\n", err)
+			log.Fatalf("failed to verify certificate : %v\n", err)
 		}
 		if 0 < i {
 			ospool.AddCert(certificates[1])

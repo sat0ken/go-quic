@@ -2,7 +2,7 @@ package quic
 
 import (
 	"crypto/tls"
-	"fmt"
+	"encoding/binary"
 )
 
 func (*ClientHello) NewQuicClientHello(sourceConnID, hostname []byte) (TLSInfo, []byte) {
@@ -151,7 +151,6 @@ func setQuicTLSExtension(hostname []byte) ([]byte, ECDHEKeys) {
 func ParseTLSHandshake(packet []byte) []interface{} {
 	var handshake []interface{}
 
-	//引き算で残りゼロバイトになるまでforを回すようにする
 	for i := 0; i < len(packet); i++ {
 		switch packet[0] {
 		case HandshakeTypeServerHello:
@@ -191,8 +190,46 @@ func ParseTLSHandshake(packet []byte) []interface{} {
 			}
 			handshake = append(handshake, cert)
 			// packetを縮める, TLSレコードヘッダの4byte+Length
-			fmt.Printf("packet length is %d, length is %d\n", len(packet), sum3BytetoLength(cert.Length))
-			//packet = packet[4+sum3BytetoLength(cert.Length):]
+			packet = packet[4+sum3BytetoLength(cert.Length):]
+			i = 0
+		case HandshakeTypeCertificateVerify:
+			verify := CertificateVerify{
+				HandshakeType:           packet[0:1],
+				Length:                  packet[1:4],
+				SignatureHashAlgorithms: packet[4:6],
+				SignatureLength:         packet[6:8],
+				Signature:               packet[8:],
+			}
+			handshake = append(handshake, verify)
+			// packetを縮める, TLSレコードヘッダの4byte+Length
+			packet = packet[4+sum3BytetoLength(verify.Length):]
+			i = 0
+		case HandshakeTypeFinished:
+			finish := FinishedMessage{
+				HandshakeType: packet[0:1],
+				Length:        packet[1:4],
+				VerifyData:    packet[4:],
+			}
+			handshake = append(handshake, finish)
+			// packetを縮める, TLSレコードヘッダの4byte+Length
+			packet = packet[4+sum3BytetoLength(finish.Length):]
+			i = 0
+		case HandshakeTypeNewSessionTicket:
+			ticketLength := binary.BigEndian.Uint16(packet[21:23]) + 23
+			session := SessionTicket{
+				HandshakeType:     packet[0:1],
+				Length:            packet[1:4],
+				TicketLifeTime:    packet[4:8],
+				TicketAgeAdd:      packet[8:12],
+				TicketNonceLength: packet[12:13],
+				TicketNonce:       packet[13:21],
+				TicketLength:      packet[21:23],
+				Ticket:            packet[23:ticketLength],
+				TicketExtensions:  packet[ticketLength:],
+			}
+			handshake = append(handshake, session)
+			// packetを縮める, TLSレコードヘッダの4byte+Length
+			packet = packet[4+sum3BytetoLength(session.Length):]
 			i = 0
 		}
 	}
