@@ -32,6 +32,7 @@ func ParseRawQuicPacket(packet []byte, protected bool) (rawpacket interface{}, p
 	p0 := fmt.Sprintf("%08b", packet[0])
 	// LongHeader = 1 で始まる
 	// ShortHeader = 0 で始まる
+	fmt.Printf("paket type is %s\n", p0[0:1])
 	switch p0[2:4] {
 	// Initial Packet
 	case "00":
@@ -116,6 +117,21 @@ func ReadLongHeader(packet []byte) ([]byte, QuicLongHeader) {
 		packet = packet[1+int(header.SourceConnIDLength[0]):]
 	}
 	return packet, header
+}
+
+func ParseShortHeaderPacket(packet []byte, destConnIdLength int) (short QuicShortHeaderPacket) {
+	short.HeaderByte = packet[0:1]
+	if destConnIdLength != 0 {
+		short.DestConnID = packet[1 : 1+destConnIdLength]
+		offset := 1 + destConnIdLength
+		short.PacketNumber = packet[offset : offset+2]
+		short.Payload = packet[offset+2:]
+	} else {
+		short.PacketNumber = packet[1:3]
+		short.Payload = packet[3:]
+	}
+
+	return short
 }
 
 func ReadPacketLengthNumberPayload(packet, headerByte []byte, protected bool) (length, pnumber, payload []byte) {
@@ -295,6 +311,22 @@ func ParseQuicFrame(packet []byte) (frame []interface{}) {
 			frame = append(frame, cframe)
 			// パースしたフレームを取り除く
 			packet = packet[4+decodedLength:]
+			// 0にしてパケットを読み込む
+			i = 0
+		case NewConnectionID:
+			newconn := NewConnectionIdFrame{
+				Type:               packet[0:1],
+				SequenceNumber:     packet[1:2],
+				RetirePriotTo:      packet[2:3],
+				ConnectionIDLength: packet[3:4],
+			}
+			length := int(newconn.ConnectionIDLength[0])
+			newconn.ConnectionID = packet[4 : 4+length]
+			// Stateless Reset Token (128) = 128bit なので 16byte
+			newconn.StatelessResetToken = packet[4+length : 4+length+16]
+			frame = append(frame, newconn)
+			// パースしたフレームを取り除く
+			packet = packet[4+length+16:]
 			// 0にしてパケットを読み込む
 			i = 0
 		}

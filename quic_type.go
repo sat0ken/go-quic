@@ -1,11 +1,12 @@
 package quic
 
 const (
-	Ping          = 0x01
-	ACK           = 0x02
-	Crypto        = 0x06
-	NewToken      = 0x07
-	HandShakeDone = 0x1e
+	Ping            = 0x01
+	ACK             = 0x02
+	Crypto          = 0x06
+	NewToken        = 0x07
+	HandShakeDone   = 0x1e
+	NewConnectionID = 0x18
 )
 
 const (
@@ -98,6 +99,13 @@ type QuicLongHeader struct {
 	SourceConnID       []byte
 }
 
+type QuicShortHeaderPacket struct {
+	HeaderByte   []byte
+	DestConnID   []byte
+	PacketNumber []byte
+	Payload      []byte
+}
+
 type InitialPacket struct {
 	LongHeader   QuicLongHeader
 	TokenLength  []byte
@@ -133,6 +141,15 @@ type ACKFrames struct {
 	AckDelay            []byte
 	AckRangeCount       []byte
 	FirstAckRange       []byte
+}
+
+type NewConnectionIdFrame struct {
+	Type                []byte
+	SequenceNumber      []byte
+	RetirePriotTo       []byte
+	ConnectionIDLength  []byte
+	ConnectionID        []byte
+	StatelessResetToken []byte
 }
 
 type UDPInfo struct {
