@@ -58,30 +58,30 @@ func setQuicTransportParameters() []byte {
 	var quicParams []byte
 	var quicParamsBytes []byte
 
-	// GREASE
+	// GREASE Bit
 	quicParams = append(quicParams, []byte{0x41, 0x8f, 0x03, 0x9c, 0xcd, 0x14}...)
-	quicParams = append(quicParams, initialMaxStreamDataBidiLocal...)
-	quicParams = append(quicParams, initialMaxStreamDataBidiRemote...)
-	quicParams = append(quicParams, initialMaxStreamDataUni...)
-	quicParams = append(quicParams, initialMaxData...)
-	quicParams = append(quicParams, initialMaxStreamsBidi...)
-	quicParams = append(quicParams, initialMaxStreamsUni...)
-	quicParams = append(quicParams, maxIdleTimeout...)
-	quicParams = append(quicParams, maxUdpPayloadSize...)
-	// GREASE
+	quicParams = append(quicParams, initialMaxStreamDataBidiLocalParamByte...)
+	quicParams = append(quicParams, initialMaxStreamDataBidiRemoteParamByte...)
+	quicParams = append(quicParams, initialMaxStreamDataUniParamByte...)
+	quicParams = append(quicParams, initialMaxDataParamByte...)
+	quicParams = append(quicParams, initialMaxStreamsBidiParamByte...)
+	quicParams = append(quicParams, initialMaxStreamsUniParamByte...)
+	quicParams = append(quicParams, maxIdleTimeoutParamByte...)
+	quicParams = append(quicParams, maxUdpPayloadSizeParamByte...)
+	// GREASE Bit
 	quicParams = append(quicParams, []byte{0x0b, 0x01, 0x1a}...)
-	quicParams = append(quicParams, disableActiveMigration...)
-	quicParams = append(quicParams, activeConnectionIdLimit...)
+	quicParams = append(quicParams, disableActiveMigrationParamByte...)
+	quicParams = append(quicParams, activeConnectionIdLimitParamByte...)
 
 	// Set source connection id Length
 	//initialSourceConnectionId = append(initialSourceConnectionId, byte(len(sourceConnID)))
 	// Set source connection id
 	//initialSourceConnectionId = append(initialSourceConnectionId, sourceConnID...)
 
-	quicParams = append(quicParams, initialSourceConnectionId...)
-	quicParams = append(quicParams, maxDatagramFrameSize...)
+	quicParams = append(quicParams, initialSourceConnectionIdParamByte...)
+	quicParams = append(quicParams, maxDatagramFrameSizeParamByte...)
 
-	// Type = 57 をセット
+	// tls extensionのType = 57 をセット
 	quicParamsBytes = append(quicParamsBytes, []byte{0x00, 0x39}...)
 	// Lengthをセット
 	quicParamsBytes = append(quicParamsBytes, UintTo2byte(uint16(len(quicParams)))...)
@@ -312,7 +312,7 @@ func ParseTLSExtensions(extPacket []byte) (tlsEx []TLSExtensions) {
 }
 
 func checkQuicTransportPram(id byte) bool {
-	for _, v := range quicTransportPrameter {
+	for _, v := range quicTransportPrameterMaps {
 		if int(id) == v {
 			//fmt.Printf("quic transport parameter type is %s\n", k)
 			return true

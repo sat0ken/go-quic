@@ -16,27 +16,48 @@ const (
 	LongPacketTypeRetry
 )
 
+const (
+	originalDistinationConnectionID = iota
+	maxIdleTimeOut
+	statelessResetToken
+	maxUDPPayloadSize
+	initialMaxData
+	initialMaxStreamDataBidiLocal
+	initialMaxStreamDataBidiRemote
+	initialMaxStreamDataUni
+	initialMaxStreamsBidi
+	initialMaxStreamsUni
+	ackDelayExponent
+	maxAckDelay
+	disableActiveMigration
+	preferredAddress
+	activeConnectionIdLimit
+	initialSourceConnectionID
+	retrySourceConnectionID
+	maxDatagramFrameSize
+)
+
 // https://www.iana.org/assignments/quic/quic.xhtml
 // quic trasnsport parameters type
-var quicTransportPrameter = map[string]int{
-	"originalDistinationConnectionID": 0x00,
-	"maxIdleTimeOut":                  0x01,
-	"statelessResetToken":             0x02,
-	"maxUDPPayloadSize":               0x03,
-	"initialMaxDataType":              0x04,
-	"initialMaxStreamDataBidiLocal":   0x05,
-	"initialMaxStreamDataBidiRemote":  0x06,
-	"initialMaxStreamDataUni":         0x07,
-	"initialMaxStreamsBidi":           0x08,
-	"initialMaxStreamsUni":            0x09,
-	"ackDelayExponent":                0x0a,
-	"maxAckDelay":                     0x0b,
-	"disableActiveMigration":          0x0c,
-	"preferredAddress":                0x0d,
-	"activeConnectionIdLimit":         0x0e,
-	"initialSourceConnectionID":       0x0f,
-	"retrySourceConnectionID":         0x10,
-	"maxDatagramFrameSize":            0x20,
+var quicTransportPrameterMaps = map[string]int{
+	"originalDistinationConnectionID": originalDistinationConnectionID,
+	"maxIdleTimeOut":                  maxIdleTimeOut,
+	"statelessResetToken":             statelessResetToken,
+	"maxUDPPayloadSize":               maxUDPPayloadSize,
+	"initialMaxDataType":              initialMaxData,
+	"initialMaxStreamDataBidiLocal":   initialMaxStreamDataBidiLocal,
+	"initialMaxStreamDataBidiRemote":  initialMaxStreamDataBidiRemote,
+	"initialMaxStreamDataUni":         initialMaxStreamDataUni,
+	"initialMaxStreamsBidi":           initialMaxStreamsBidi,
+	"initialMaxStreamsUni":            initialMaxStreamsUni,
+	"ackDelayExponent":                ackDelayExponent,
+	"maxAckDelay":                     maxAckDelay,
+	"disableActiveMigration":          disableActiveMigration,
+	"preferredAddress":                preferredAddress,
+	"activeConnectionIdLimit":         activeConnectionIdLimit,
+	"initialSourceConnectionID":       initialSourceConnectionID,
+	"retrySourceConnectionID":         retrySourceConnectionID,
+	"maxDatagramFrameSize":            maxDatagramFrameSize,
 	//TODO: ここから下はいるのか？ quic-goはまでmaxDatagramFrameSizeしか定義してないな
 	//"discard":                            0x173e,
 	//"greaseBit":                          0x2ab2,
@@ -63,18 +84,18 @@ var quicHPLabel = []byte(`quic hp`)
 
 // Quic Transport Prameters
 // 18.2. Transport Parameter Definitions
-var initialMaxStreamDataBidiLocal = []byte{0x05, 0x04, 0x80, 0x08, 0x00, 0x00}
-var initialMaxStreamDataBidiRemote = []byte{0x06, 0x04, 0x80, 0x08, 0x00, 0x00}
-var initialMaxStreamDataUni = []byte{0x07, 0x04, 0x80, 0x08, 0x00, 0x00}
-var initialMaxData = []byte{0x04, 0x04, 0x80, 0x0c, 0x00, 0x00}
-var initialMaxStreamsBidi = []byte{0x08, 0x01, 0x00}
-var initialMaxStreamsUni = []byte{0x09, 0x02, 0x40, 0x64}
-var maxIdleTimeout = []byte{0x01, 0x04, 0x80, 0x00, 0x75, 0x30}
-var maxUdpPayloadSize = []byte{0x03, 0x02, 0x45, 0xac}
-var disableActiveMigration = []byte{0x0c, 0x00}
-var activeConnectionIdLimit = []byte{0x0e, 0x01, 0x04}
-var initialSourceConnectionId = []byte{0x0f, 0x00}
-var maxDatagramFrameSize = []byte{0x20, 0x01, 0x00}
+var initialMaxStreamDataBidiLocalParamByte = []byte{initialMaxStreamDataBidiLocal, 0x04, 0x80, 0x08, 0x00, 0x00}
+var initialMaxStreamDataBidiRemoteParamByte = []byte{initialMaxStreamDataBidiRemote, 0x04, 0x80, 0x08, 0x00, 0x00}
+var initialMaxStreamDataUniParamByte = []byte{initialMaxStreamDataUni, 0x04, 0x80, 0x08, 0x00, 0x00}
+var initialMaxDataParamByte = []byte{initialMaxData, 0x04, 0x80, 0x0c, 0x00, 0x00}
+var initialMaxStreamsBidiParamByte = []byte{initialMaxStreamsBidi, 0x01, 0x00}
+var initialMaxStreamsUniParamByte = []byte{initialMaxStreamsUni, 0x02, 0x40, 0x64}
+var maxIdleTimeoutParamByte = []byte{maxIdleTimeOut, 0x04, 0x80, 0x00, 0x75, 0x30}
+var maxUdpPayloadSizeParamByte = []byte{maxUDPPayloadSize, 0x02, 0x45, 0xac}
+var disableActiveMigrationParamByte = []byte{disableActiveMigration, 0x00}
+var activeConnectionIdLimitParamByte = []byte{activeConnectionIdLimit, 0x01, 0x04}
+var initialSourceConnectionIdParamByte = []byte{initialSourceConnectionID, 0x00}
+var maxDatagramFrameSizeParamByte = []byte{maxDatagramFrameSize, 0x01, 0x00}
 
 type QuicKeyBlock struct {
 	ClientKey              []byte
