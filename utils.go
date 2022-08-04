@@ -159,7 +159,7 @@ func AppendPaddingFrame(data []byte, to int) []byte {
 	return data
 }
 
-//Crypto Frameの前にPaddingを入れる
+//Paddingを入れる
 func UnshiftPaddingFrame(data []byte, to int) []byte {
 	var extend []byte
 	for i := 0; i <= to; i++ {

@@ -512,3 +512,26 @@ func SkipPaddingFrame(packet []byte) [][]byte {
 
 	return framesByte
 }
+
+func SendInitialPacket() {
+	dcid := StrtoByte("7b268ba2b1ced2e48ed34a0a38")
+	keyblock := CreateQuicInitialSecret(dcid)
+	_ = keyblock
+
+	_, chelloByte := NewQuicClientHello()
+	cryptoByte := toByteArr(NewQuicCryptoFrame(chelloByte))
+
+	var init InitialPacket
+	initPacket := init.NewInitialPacket(dcid, nil, nil, 0, 2)
+	paddingLength := 1252 - len(toByteArr(initPacket.LongHeader)) -
+		len(initPacket.PacketNumber) - len(cryptoByte) - 16 - 4
+
+	initPacket.Payload = UnshiftPaddingFrame(cryptoByte, paddingLength)
+	// PayloadのLength + Packet番号のLength + AEADの認証タグ長=16
+	length := len(initPacket.Payload) + len(initPacket.PacketNumber) + 16
+	// 可変長整数のエンコードをしてLengthをセット
+	initPacket.Length = EncodeVariableInt(length)
+
+	PrintPacket(initPacket.Payload, "padding packet")
+
+}

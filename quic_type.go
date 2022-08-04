@@ -34,7 +34,7 @@ const (
 	activeConnectionIdLimit
 	initialSourceConnectionID
 	retrySourceConnectionID
-	maxDatagramFrameSize
+	maxDatagramFrameSize = 0x20
 )
 
 // https://www.iana.org/assignments/quic/quic.xhtml
@@ -88,7 +88,7 @@ var initialMaxStreamDataBidiLocalParamByte = []byte{initialMaxStreamDataBidiLoca
 var initialMaxStreamDataBidiRemoteParamByte = []byte{initialMaxStreamDataBidiRemote, 0x04, 0x80, 0x08, 0x00, 0x00}
 var initialMaxStreamDataUniParamByte = []byte{initialMaxStreamDataUni, 0x04, 0x80, 0x08, 0x00, 0x00}
 var initialMaxDataParamByte = []byte{initialMaxData, 0x04, 0x80, 0x0c, 0x00, 0x00}
-var initialMaxStreamsBidiParamByte = []byte{initialMaxStreamsBidi, 0x01, 0x00}
+var initialMaxStreamsBidiParamByte = []byte{initialMaxStreamsBidi, 0x02, 0x40, 0x64}
 var initialMaxStreamsUniParamByte = []byte{initialMaxStreamsUni, 0x02, 0x40, 0x64}
 var maxIdleTimeoutParamByte = []byte{maxIdleTimeOut, 0x04, 0x80, 0x00, 0x75, 0x30}
 var maxUdpPayloadSizeParamByte = []byte{maxUDPPayloadSize, 0x02, 0x45, 0xac}

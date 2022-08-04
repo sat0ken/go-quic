@@ -5,34 +5,35 @@ import (
 	"encoding/binary"
 )
 
-func (*ClientHello) NewQuicClientHello(sourceConnID, hostname []byte) (TLSInfo, []byte) {
+func NewQuicClientHello() (TLSInfo, []byte) {
 	var tlsinfo TLSInfo
 	handshake := ClientHello{
-		HandshakeType:      []byte{HandshakeTypeClientHello},
-		Length:             []byte{0x00, 0x00, 0x00},
-		Version:            TLS1_2,
-		Random:             noRandomByte(32),
-		SessionIDLength:    []byte{0x00},
-		CipherSuitesLength: []byte{0x00, 0x06},
+		HandshakeType:   []byte{HandshakeTypeClientHello},
+		Length:          []byte{0x00, 0x00, 0x00},
+		Version:         TLS1_2,
+		Random:          noRandomByte(32),
+		SessionIDLength: []byte{0x00},
+		//CipherSuitesLength: []byte{0x00, 0x06},
 		// TLS_RSA_WITH_AES_128_GCM_SHA256
 		// TLS_RSA_WITH_AES_128_GCM_SHA384
 		// TLS_CHACHA20_POLY1305_SHA256
-		CipherSuites: []byte{0x13, 0x01, 0x13, 0x02, 0x13, 0x03},
+		//CipherSuites: []byte{0x13, 0x01, 0x13, 0x02, 0x13, 0x03},
 
-		//CipherSuitesLength: []byte{0x00, 0x26},
-		//CipherSuites: []byte{
-		//	0xc0, 0x2b, 0xc0, 0x2f, 0xc0, 0x2c, 0xc0, 0x30,
-		//	0xcc, 0xa9, 0xcc, 0xa8, 0xc0, 0x09, 0xc0, 0x13,
-		//	0xc0, 0x0a, 0xc0, 0x14, 0x00, 0x9c, 0x00, 0x9d,
-		//	0x00, 0x2f, 0x00, 0x35, 0xc0, 0x12, 0x00, 0x0a,
-		//	0x13, 0x01, 0x13, 0x02, 0x13, 0x03,
-		//},
+		// quic-goのCipherSuite
+		CipherSuitesLength: []byte{0x00, 0x26},
+		CipherSuites: []byte{
+			0xc0, 0x2b, 0xc0, 0x2f, 0xc0, 0x2c, 0xc0, 0x30,
+			0xcc, 0xa9, 0xcc, 0xa8, 0xc0, 0x09, 0xc0, 0x13,
+			0xc0, 0x0a, 0xc0, 0x14, 0x00, 0x9c, 0x00, 0x9d,
+			0x00, 0x2f, 0x00, 0x35, 0xc0, 0x12, 0x00, 0x0a,
+			0x13, 0x01, 0x13, 0x02, 0x13, 0x03,
+		},
 		CompressionLength: []byte{0x01},
 		CompressionMethod: []byte{0x00},
 	}
 
 	// TLS1.3のextensionをセット
-	handshake.Extensions, tlsinfo.ECDHEKeys = setQuicTLSExtension(hostname)
+	handshake.Extensions, tlsinfo.ECDHEKeys = setQuicTLSExtension()
 	// Quic transport parameterを追加
 	handshake.Extensions = append(handshake.Extensions, setQuicTransportParameters()...)
 	// ExtensionLengthをセット
@@ -59,7 +60,7 @@ func setQuicTransportParameters() []byte {
 	var quicParamsBytes []byte
 
 	// GREASE Bit
-	quicParams = append(quicParams, []byte{0x41, 0x8f, 0x03, 0x9c, 0xcd, 0x14}...)
+	quicParams = append(quicParams, []byte{0x42, 0x0b, 0x04, 0x1f, 0xad, 0x78, 0x8e}...)
 	quicParams = append(quicParams, initialMaxStreamDataBidiLocalParamByte...)
 	quicParams = append(quicParams, initialMaxStreamDataBidiRemoteParamByte...)
 	quicParams = append(quicParams, initialMaxStreamDataUniParamByte...)
@@ -91,11 +92,11 @@ func setQuicTransportParameters() []byte {
 }
 
 // golangのclientのをキャプチャしてそのままセットする
-func setQuicTLSExtension(hostname []byte) ([]byte, ECDHEKeys) {
+func setQuicTLSExtension() ([]byte, ECDHEKeys) {
 	var tlsExtension []byte
 
 	// server_name
-	tlsExtension = append(tlsExtension, setServerNameExt(hostname)...)
+	tlsExtension = append(tlsExtension, setServerNameExt([]byte(`localhost`))...)
 
 	//　status_reqeust
 	tlsExtension = append(tlsExtension, []byte{0x00, 0x05, 0x00, 0x05, 0x01, 0x00, 0x00, 0x00, 0x00}...)
@@ -119,7 +120,12 @@ func setQuicTLSExtension(hostname []byte) ([]byte, ECDHEKeys) {
 	tlsExtension = append(tlsExtension, []byte{0xff, 0x01, 0x00, 0x01, 0x00}...)
 
 	// Application Layer Protocol Negotiation
-	tlsExtension = append(tlsExtension, []byte{0x00, 0x10, 0x00, 0x05, 0x00, 0x03, 0x02, 0x68, 0x33}...)
+	//tlsExtension = append(tlsExtension, []byte{0x00, 0x10, 0x00, 0x05, 0x00, 0x03, 0x02, 0x68, 0x33}...)
+	// quic-echo-example
+	tlsExtension = append(tlsExtension, []byte{
+		0x00, 0x10, 0x00, 0x14, 0x00, 0x12, 0x11, 0x71,
+		0x75, 0x69, 0x63, 0x2d, 0x65, 0x63, 0x68, 0x6f,
+		0x2d, 0x65, 0x78, 0x61, 0x6d, 0x70, 0x6c, 0x65}...)
 
 	// signed_certificate_timestamp
 	tlsExtension = append(tlsExtension, []byte{0x00, 0x12, 0x00, 0x00}...)
@@ -138,7 +144,8 @@ func setQuicTLSExtension(hostname []byte) ([]byte, ECDHEKeys) {
 	// keyのLength = 32byte
 	tlsExtension = append(tlsExtension, []byte{0x00, 0x20}...)
 	// 公開鍵を追加
-	tlsExtension = append(tlsExtension, clientkey.PublicKey...)
+	pubkey := strtoByte("2fe57da347cd62431528daac5fbb290730fff684afc4cfc2ed90995f58cb3b74")
+	tlsExtension = append(tlsExtension, pubkey...)
 	//tlsExtension = append(tlsExtension, strtoByte("2fe57da347cd62431528daac5fbb290730fff684afc4cfc2ed90995f58cb3b74")...)
 
 	// set length
