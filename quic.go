@@ -334,7 +334,7 @@ func ParseQuicFrame(packet []byte) (frame []interface{}) {
 	return frame
 }
 
-func (*InitialPacket) NewInitialPacket(destConnID, sourceConnID, token []byte, pnum, pnumlen uint) InitialPacket {
+func NewInitialPacket(destConnID, sourceConnID, token []byte, pnum, pnumlen uint) InitialPacket {
 	// とりあえず2byte
 	var packetNum []byte
 	if pnumlen == 2 {
@@ -513,16 +513,30 @@ func SkipPaddingFrame(packet []byte) [][]byte {
 	return framesByte
 }
 
-func SendInitialPacket() {
-	dcid := StrtoByte("7b268ba2b1ced2e48ed34a0a38")
-	keyblock := CreateQuicInitialSecret(dcid)
-	_ = keyblock
+func (*InitialPacket) ToHeaderByte(initPacket InitialPacket) (headerByte []byte) {
+	headerByte = toByteArr(initPacket.LongHeader)
+	// set token
+	if bytes.Equal(initPacket.TokenLength, []byte{0x00}) {
+		headerByte = append(headerByte, initPacket.TokenLength...)
+	} else {
+		headerByte = append(headerByte, initPacket.TokenLength...)
+		headerByte = append(headerByte, initPacket.Token...)
+	}
 
-	_, chelloByte := NewQuicClientHello()
+	headerByte = append(headerByte, initPacket.Length...)
+	headerByte = append(headerByte, initPacket.PacketNumber...)
+	return headerByte
+}
+
+// Initial Packetを生成してTLSの鍵情報と返す
+func CreateInitialPacket(dcid []byte) (TLSInfo, []byte) {
+	// Destination Connection IDからInitial Packetの暗号化に使う鍵を生成する
+	keyblock := CreateQuicInitialSecret(dcid)
+
+	tlsinfo, chelloByte := NewQuicClientHello()
 	cryptoByte := toByteArr(NewQuicCryptoFrame(chelloByte))
 
-	var init InitialPacket
-	initPacket := init.NewInitialPacket(dcid, nil, nil, 0, 2)
+	initPacket := NewInitialPacket(dcid, nil, nil, 0, 2)
 	paddingLength := 1252 - len(toByteArr(initPacket.LongHeader)) -
 		len(initPacket.PacketNumber) - len(cryptoByte) - 16 - 4
 
@@ -532,6 +546,17 @@ func SendInitialPacket() {
 	// 可変長整数のエンコードをしてLengthをセット
 	initPacket.Length = EncodeVariableInt(length)
 
-	PrintPacket(initPacket.Payload, "padding packet")
+	// ヘッダをByteにする
+	headerByte := initPacket.ToHeaderByte(initPacket)
 
+	// Padding+Crypto FrameのPayloadを暗号化する
+	encpayload := EncryptClientPayload(initPacket.PacketNumber, headerByte, initPacket.Payload, keyblock)
+
+	// 暗号化したPayloadをヘッダとくっつける
+	packet := headerByte
+	packet = append(packet, encpayload...)
+	// ヘッダ内のPacket Number Lengthの2bitとPacket Numberを暗号化する
+	protectPacket := ProtectHeader(len(headerByte)-2, packet, keyblock.ClientHeaderProtection)
+
+	return tlsinfo, protectPacket
 }
