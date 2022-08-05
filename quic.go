@@ -334,6 +334,7 @@ func ParseQuicFrame(packet []byte) (frame []interface{}) {
 	return frame
 }
 
+// Inital Packetを生成する
 func NewInitialPacket(destConnID, sourceConnID, token []byte, pnum, pnumlen uint) InitialPacket {
 	// とりあえず2byte
 	var packetNum []byte
@@ -471,18 +472,21 @@ func NewQuicCryptoFrame(data []byte) CryptoFrames {
 	}
 }
 
-func SendQuicPacket(data []byte, server []byte, port int) (interface{}, int) {
-	recvBuf := make([]byte, 1500)
-
-	serverinfo := net.UDPAddr{
+func ConnectQuicServer(server []byte, port int) *net.UDPConn {
+	serverInfo := net.UDPAddr{
 		IP:   server,
 		Port: port,
 	}
-
-	conn, err := net.DialUDP("udp", nil, &serverinfo)
+	conn, err := net.DialUDP("udp", nil, &serverInfo)
 	if err != nil {
-		log.Fatalf("Can't UDP data to server : %v", err)
+		log.Fatalf("Can't connect quic server : %v", err)
 	}
+	return conn
+}
+
+func SendQuicPacket(conn *net.UDPConn, data []byte) (interface{}, int) {
+	recvBuf := make([]byte, 65535)
+
 	conn.Write(data)
 	n, _ := conn.Read(recvBuf)
 	fmt.Printf("recv packet : %x\n", recvBuf[0:n])
@@ -529,14 +533,14 @@ func (*InitialPacket) ToHeaderByte(initPacket InitialPacket) (headerByte []byte)
 }
 
 // Initial Packetを生成してTLSの鍵情報と返す
-func CreateInitialPacket(dcid []byte) (TLSInfo, []byte) {
+func CreateInitialPacket(dcid, token []byte) (TLSInfo, []byte) {
 	// Destination Connection IDからInitial Packetの暗号化に使う鍵を生成する
 	keyblock := CreateQuicInitialSecret(dcid)
 
 	tlsinfo, chelloByte := NewQuicClientHello()
 	cryptoByte := toByteArr(NewQuicCryptoFrame(chelloByte))
 
-	initPacket := NewInitialPacket(dcid, nil, nil, 0, 2)
+	initPacket := NewInitialPacket(dcid, nil, token, 0, 2)
 	paddingLength := 1252 - len(toByteArr(initPacket.LongHeader)) -
 		len(initPacket.PacketNumber) - len(cryptoByte) - 16 - 4
 
