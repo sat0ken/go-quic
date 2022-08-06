@@ -162,7 +162,7 @@ func AppendPaddingFrame(data []byte, to int) []byte {
 //Paddingを入れる
 func UnshiftPaddingFrame(data []byte, to int) []byte {
 	var extend []byte
-	for i := 0; i <= to; i++ {
+	for i := 0; i < to; i++ {
 		extend = append(extend, 0x00)
 	}
 	extend = append(extend, data...)

@@ -32,7 +32,7 @@ func ParseRawQuicPacket(packet []byte, protected bool) (rawpacket interface{}, p
 	p0 := fmt.Sprintf("%08b", packet[0])
 	// LongHeader = 1 で始まる
 	// ShortHeader = 0 で始まる
-	fmt.Printf("paket type is %s\n", p0[0:1])
+	//fmt.Printf("paket type is %s\n", p0[0:1])
 	switch p0[2:4] {
 	// Initial Packet
 	case "00":
@@ -205,7 +205,7 @@ func ProtectHeader(pnOffset int, packet, hpkey []byte) []byte {
 	// RFC9001 5.4.2. ヘッダー保護のサンプル
 	sampleOffset := pnOffset + 4
 
-	fmt.Printf("pnOffset is %d, sampleOffset is %d\n", pnOffset, sampleOffset)
+	//fmt.Printf("pnOffset is %d, sampleOffset is %d\n", pnOffset, sampleOffset)
 	block, err := aes.NewCipher(hpkey)
 	if err != nil {
 		log.Fatalf("protect header err : %v\n", err)
@@ -388,6 +388,8 @@ func NewInitialPacket(destConnID, sourceConnID, token []byte, pnum, pnumlen uint
 	}
 	// packet numberをセット
 	initPacket.PacketNumber = packetNum
+	// Lengthを空でセット
+	initPacket.Length = []byte{0x00, 0x00}
 
 	return initPacket
 }
@@ -533,16 +535,16 @@ func (*InitialPacket) ToHeaderByte(initPacket InitialPacket) (headerByte []byte)
 }
 
 // Initial Packetを生成してTLSの鍵情報と返す
-func CreateInitialPacket(dcid, token []byte) (TLSInfo, []byte) {
+func CreateInitialPacket(dcid, token []byte, pnum uint) (TLSInfo, []byte) {
 	// Destination Connection IDからInitial Packetの暗号化に使う鍵を生成する
 	keyblock := CreateQuicInitialSecret(dcid)
 
 	tlsinfo, chelloByte := NewQuicClientHello()
 	cryptoByte := toByteArr(NewQuicCryptoFrame(chelloByte))
 
-	initPacket := NewInitialPacket(dcid, nil, token, 0, 2)
-	paddingLength := 1252 - len(toByteArr(initPacket.LongHeader)) -
-		len(initPacket.PacketNumber) - len(cryptoByte) - 16 - 4
+	initPacket := NewInitialPacket(dcid, nil, token, pnum, 2)
+	// Padding Frame の長さ = 1252 - LongHeaderのLength - Crypto FrameのLength - 16
+	paddingLength := 1252 - len(initPacket.ToHeaderByte(initPacket)) - len(cryptoByte) - 16
 
 	initPacket.Payload = UnshiftPaddingFrame(cryptoByte, paddingLength)
 	// PayloadのLength + Packet番号のLength + AEADの認証タグ長=16
@@ -552,6 +554,7 @@ func CreateInitialPacket(dcid, token []byte) (TLSInfo, []byte) {
 
 	// ヘッダをByteにする
 	headerByte := initPacket.ToHeaderByte(initPacket)
+	//fmt.Printf("header is %x\n", headerByte)
 
 	// Padding+Crypto FrameのPayloadを暗号化する
 	encpayload := EncryptClientPayload(initPacket.PacketNumber, headerByte, initPacket.Payload, keyblock)

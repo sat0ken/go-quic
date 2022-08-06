@@ -62,7 +62,7 @@ func _() {
 
 func main() {
 	dcid := quic.StrtoByte("7b268ba2b1ced2e48ed34a0a38")
-	quic.CreateInitialPacket(dcid, nil)
+	quic.CreateInitialPacket(dcid, nil, 0)
 }
 
 func _() {
