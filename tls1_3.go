@@ -269,7 +269,7 @@ func KeyscheduleToMasterSecret(sharedkey, handshake_messages []byte) KeyBlockTLS
 }
 
 func KeyscheduleToAppTraffic(tlsinfo TLSInfo) TLSInfo {
-	hash_messages := WriteHash(tlsinfo.Handshakemessages)
+	hash_messages := WriteHash(toByteArr(tlsinfo.HandshakeMessages))
 	fmt.Printf("hashed messages is %x\n", hash_messages)
 
 	zero := noRandomByte(32)

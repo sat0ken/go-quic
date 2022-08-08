@@ -3,6 +3,7 @@ package quic
 import (
 	"crypto/tls"
 	"encoding/binary"
+	"fmt"
 )
 
 func NewQuicClientHello() (TLSInfo, []byte) {
@@ -49,7 +50,7 @@ func NewQuicClientHello() (TLSInfo, []byte) {
 	//hello = append(hello, handshakebyte...)
 
 	// ClientHelloを保存しておく
-	tlsinfo.Handshakemessages = handshakebyte
+	tlsinfo.HandshakeMessages.ClientHello = handshakebyte
 
 	return tlsinfo, handshakebyte
 }
@@ -156,7 +157,7 @@ func setQuicTLSExtension() ([]byte, ECDHEKeys) {
 	return tlsExtension, clientkey
 }
 
-func ParseTLSHandshake(packet []byte) []interface{} {
+func ParseTLSHandshake(packet []byte) ([]interface{}, bool) {
 	var handshake []interface{}
 
 	for i := 0; i < len(packet); i++ {
@@ -194,12 +195,28 @@ func ParseTLSHandshake(packet []byte) []interface{} {
 				Length:                           packet[1:4],
 				CertificatesRequestContextLength: packet[4:5],
 				CertificatesLength:               packet[5:8],
-				Certificates:                     readCertificates(packet[8:]),
 			}
-			handshake = append(handshake, cert)
-			// packetを縮める, TLSレコードヘッダの4byte+Length
-			packet = packet[4+sum3BytetoLength(cert.Length):]
-			i = 0
+
+			// Certificate PacketのLengthよりPacketの残りのLengthが小さいときはTLSパケットが分割されてるので、
+			// 読み込みをやめて前半のパケットを保存しておく
+			if len(packet) < int(sum3BytetoLength(cert.Length)) {
+				fragPacket := FragmentTLSPacket{
+					Type:   HandshakeTypeCertificate,
+					Packet: packet[:],
+					// 残りのPacketのLength, 最後に足している4byteはTLSレコードヘッダの4byte(Typeの1byte + Lengthの3byte)
+					RemainPacketLength: int(sum3BytetoLength(cert.Length)) - len(packet) + 4,
+				}
+				handshake = append(handshake, fragPacket)
+				// packetを縮める
+				packet = packet[len(packet):]
+				i = 0
+			} else {
+				cert.Certificates = readCertificates(packet[8:])
+				handshake = append(handshake, cert)
+				// packetを縮める
+				packet = packet[4+sum3BytetoLength(cert.Length):]
+				i = 0
+			}
 		case HandshakeTypeCertificateVerify:
 			verify := CertificateVerify{
 				HandshakeType:           packet[0:1],
@@ -242,7 +259,7 @@ func ParseTLSHandshake(packet []byte) []interface{} {
 		}
 	}
 
-	return handshake
+	return handshake, isPacketFragment(handshake)
 }
 
 func setServerNameExt(hostname []byte) []byte {
@@ -361,4 +378,14 @@ func ParseQuicTransportPrameters(packet []byte) (quicPrams []QuicParameters) {
 		}
 	}
 	return quicPrams
+}
+
+func isPacketFragment(packet []interface{}) bool {
+	for _, v := range packet {
+		t := fmt.Sprintf("%T", v)
+		if t == "quic.FragmentTLSPacket" {
+			return true
+		}
+	}
+	return false
 }

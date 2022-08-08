@@ -27,68 +27,87 @@ func CreateQuicInitialSecret(dstConnId []byte) QuicKeyBlock {
 }
 
 // QUICパケットをパースする
-func ParseRawQuicPacket(packet []byte, protected bool) (rawpacket interface{}, packetType int) {
+func ParseRawQuicPacket(packet []byte, protected bool) (rawpacket []ParsedQuicPacket) {
 
-	p0 := fmt.Sprintf("%08b", packet[0])
-	// LongHeader = 1 で始まる
-	// ShortHeader = 0 で始まる
-	//fmt.Printf("paket type is %s\n", p0[0:1])
-	switch p0[2:4] {
-	// Initial Packet
-	case "00":
-		// Longヘッダの処理
-		packet, header := ReadLongHeader(packet)
+	for i := 0; i < len(packet); i++ {
+		p0 := fmt.Sprintf("%08b", packet[0])
+		// LongHeader = 1 で始まる
+		// ShortHeader = 0 で始まる
+		fmt.Printf("packet type is %s\n", p0[0:1])
+		switch p0[2:4] {
+		// Initial Packet
+		case "00":
+			// Longヘッダの処理
+			var header QuicLongHeader
+			packet, header = ReadLongHeader(packet)
 
-		// ここからInitialパケットの処理
-		var initPacket InitialPacket
-		initPacket.LongHeader = header
+			// Initialパケットの処理
+			var initPacket InitialPacket
+			initPacket.LongHeader = header
 
-		// Token Lengthが0なら
-		if bytes.Equal(packet[0:1], []byte{0x00}) {
-			initPacket.TokenLength = packet[0:1]
+			// Token Lengthが0なら
+			if bytes.Equal(packet[0:1], []byte{0x00}) {
+				initPacket.TokenLength = packet[0:1]
+				// packetを縮める
+				packet = packet[1:]
+			} else {
+				initPacket.TokenLength = packet[0:1]
+				tokenLength := sumByteArr(DecodeVariableInt([]int{int(packet[0]), int(packet[1])}))
+				initPacket.Token = packet[2 : 2+tokenLength]
+				// packetを縮める
+				packet = packet[2+tokenLength:]
+			}
+			// Length~を処理
+			initPacket.Length, initPacket.PacketNumber, initPacket.Payload = ReadPacketLengthNumberPayload(
+				packet, initPacket.LongHeader.HeaderByte, protected)
+
+			rawpacket = append(rawpacket, ParsedQuicPacket{
+				Packet: initPacket,
+				Type:   LongPacketTypeInitial,
+			})
 			// packetを縮める
-			packet = packet[1:]
-		} else {
-			//fmt.Println("tokenがあるよ")
-			initPacket.TokenLength = packet[0:1]
-			//initPacket.TokenLength = DecodeVariableInt([]int{int(packet[0]), int(packet[1])})
-			tokenLength := sumByteArr(DecodeVariableInt([]int{int(packet[0]), int(packet[1])}))
-			initPacket.Token = packet[2 : 2+tokenLength]
+			packet = packet[sumByteArr(initPacket.Length)+2:]
+			i = 0
+		// Handshake Packet
+		case "10":
+			var header QuicLongHeader
+			packet, header = ReadLongHeader(packet)
+			// Longヘッダの処理はここまで
+			// ここからHandshakeパケットの処理、Length以降を埋める
+			var handshake HandshakePacket
+			handshake.LongHeader = header
+
+			handshake.Length, handshake.PacketNumber, handshake.Payload = ReadPacketLengthNumberPayload(
+				packet, handshake.LongHeader.HeaderByte, true)
+
+			rawpacket = append(rawpacket, ParsedQuicPacket{
+				Packet: handshake,
+				Type:   LongPacketTypeHandshake,
+			})
+
 			// packetを縮める
-			packet = packet[2+tokenLength:]
+			packet = packet[sumByteArr(handshake.Length)+2:]
+			i = 0
+		// Retry Packet
+		case "11":
+			var header QuicLongHeader
+			packet, header = ReadLongHeader(packet)
+			retry := RetryPacket{
+				LongHeader:         header,
+				RetryToken:         packet[0 : len(packet)-16],
+				RetryIntergrityTag: packet[len(packet)-16:],
+			}
+			rawpacket = append(rawpacket, ParsedQuicPacket{
+				Packet: retry,
+				Type:   LongPacketTypeRetry,
+			})
+			// packetを縮める
+			packet = packet[len(packet):]
+			i = 0
 		}
-		// Length~を処理
-		initPacket.Length, initPacket.PacketNumber, initPacket.Payload = ReadPacketLengthNumberPayload(
-			packet, initPacket.LongHeader.HeaderByte, protected)
-
-		rawpacket = initPacket
-		packetType = LongPacketTypeInitial
-	// Handshake Packet
-	case "10":
-		packet, header := ReadLongHeader(packet)
-		// Longヘッダの処理はここまで
-		// ここからHandshakeパケットの処理、Length〜を埋める
-		var handshake HandshakePacket
-		handshake.LongHeader = header
-
-		handshake.Length, handshake.PacketNumber, handshake.Payload = ReadPacketLengthNumberPayload(
-			packet, handshake.LongHeader.HeaderByte, true)
-
-		rawpacket = handshake
-		packetType = LongPacketTypeHandshake
-
-	// Retry Packet
-	case "11":
-		packet, header := ReadLongHeader(packet)
-		rawpacket = RetryPacket{
-			LongHeader:         header,
-			RetryToken:         packet[0 : len(packet)-16],
-			RetryIntergrityTag: packet[len(packet)-16:],
-		}
-		packetType = LongPacketTypeRetry
 	}
 
-	return rawpacket, packetType
+	return rawpacket
 }
 
 func ReadLongHeader(packet []byte) ([]byte, QuicLongHeader) {
@@ -164,7 +183,7 @@ func ReadPacketLengthNumberPayload(packet, headerByte []byte, protected bool) (l
 }
 
 // UnprotectHeader ヘッダ保護を解除したパケットにする
-func UnprotectHeader(pnOffset int, packet, hpkey []byte) (interface{}, int) {
+func UnprotectHeader(pnOffset int, packet, hpkey []byte) []ParsedQuicPacket {
 	// https://tex2e.github.io/blog/protocol/quic-initial-packet-decrypt
 	// RFC9001 5.4.2. ヘッダー保護のサンプル
 	// Packet Numberの0byte目があるoffset
@@ -486,16 +505,54 @@ func ConnectQuicServer(server []byte, port int) *net.UDPConn {
 	return conn
 }
 
-func SendQuicPacket(conn *net.UDPConn, data []byte) (interface{}, int) {
+func SendQuicPacket(conn *net.UDPConn, data []byte) []ParsedQuicPacket {
 	recvBuf := make([]byte, 65535)
 
 	conn.Write(data)
 	n, _ := conn.Read(recvBuf)
-	fmt.Printf("recv packet : %x\n", recvBuf[0:n])
-	packet, packetType := ParseRawQuicPacket(recvBuf[0:n], false)
 
-	return packet, packetType
+	fmt.Printf("recv packet : %x\n", recvBuf[0:n])
+
+	return ParseRawQuicPacket(recvBuf[0:n], true)
 }
+
+//func NewUDPSocket() int {
+//	sendfd, err := syscall.Socket(syscall.AF_INET, syscall.SOCK_DGRAM, syscall.IPPROTO_IP)
+//	if err != nil {
+//		log.Fatalf("create socket err : %v\n", err)
+//	}
+//	//syscall.SetsockoptInt(sendfd, syscall.SOL_IP, syscall.IP_MTU_DISCOVER, 2)
+//	// UDP packetを受信するためにbindする
+//	syscall.Bind(sendfd, &syscall.SockaddrInet4{
+//		Addr: [4]byte{127, 0, 0, 1},
+//		Port: 42279,
+//	})
+//	return sendfd
+//}
+//
+//func SendToQuicServer(senfd int, packet []byte) []byte {
+//
+//	addr := syscall.SockaddrInet4{
+//		Addr: [4]byte{127, 0, 0, 1},
+//		Port: 18443,
+//	}
+//	err := syscall.Sendto(senfd, packet, 0, &addr)
+//	if err != nil {
+//		log.Fatalf("send packet err : %v\n", err)
+//	}
+//	//for {
+//	buffer := make([]byte, 65535)
+//	oob := make([]byte, 65535)
+//	n, oobn, _, _, err := syscall.Recvmsg(senfd, buffer, oob, syscall.MSG_OOB)
+//	//n, _, err := syscall.Recvfrom(senfd, buffer, 0)
+//	if err != nil {
+//		log.Fatalf("recv err : %v", err)
+//	}
+//	fmt.Printf("recv packet is %d,  %x\n", n, buffer[:n])
+//	fmt.Printf("recv oob is %x\n", buffer[:oobn])
+//	return buffer[:n]
+//	//}
+//}
 
 // paddingフレームを読み飛ばして、QUICのフレームを配列に入れて返す
 func SkipPaddingFrame(packet []byte) [][]byte {

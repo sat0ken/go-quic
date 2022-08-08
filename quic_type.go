@@ -106,9 +106,14 @@ type QuicKeyBlock struct {
 	ServerHeaderProtection []byte
 }
 
-type QuicRawPacket struct {
-	QuicHeader interface{}
-	QuicFrames []interface{}
+//type QuicRawPacket struct {
+//	QuicHeader interface{}
+//	QuicFrames []interface{}
+//}
+
+type ParsedQuicPacket struct {
+	Packet interface{}
+	Type   int
 }
 
 type QuicLongHeader struct {

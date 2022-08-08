@@ -60,12 +60,12 @@ func _() {
 	quic.PrintPacket(encryptedMessage, "plain text")
 }
 
-func main() {
+func _() {
 	dcid := quic.StrtoByte("7b268ba2b1ced2e48ed34a0a38")
 	quic.CreateInitialPacket(dcid, nil, 0)
 }
 
-func _() {
+func main() {
 	fmt.Println("--- decryptHandshake ---")
 	destconnID := quic.StrtoByte("5306bcce")
 	// destination connection id からキーを生成する
@@ -88,6 +88,7 @@ func _() {
 	parsed, _ := quic.ParseRawQuicPacket(rawHandshakePacket, true)
 
 	rawHandshake := parsed.(quic.HandshakePacket)
+	// 2 = パケット番号の長さ
 	startPnumOffset := len(rawHandshakePacket) - len(rawHandshake.Payload) - 2
 
 	unprotect, _ := quic.UnprotectHeader(startPnumOffset, rawHandshakePacket, tls13Keyblock.ServerHandshakeHPKey)

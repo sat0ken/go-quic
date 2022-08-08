@@ -181,13 +181,22 @@ type KeyBlock struct {
 	ServerWriteIV  []byte
 }
 
+type HandshakeMessages struct {
+	ClientHello         []byte
+	ServerHello         []byte
+	EncryptedExtensions []byte
+	ServerCertificate   []byte
+	CertificateVerify   []byte
+	FinishedMessage     []byte
+}
+
 type TLSInfo struct {
 	State              int
 	Version            []byte
 	MasterSecretInfo   MasterSecretInfo
 	KeyBlock           KeyBlock
 	KeyBlockTLS13      KeyBlockTLS13
-	Handshakemessages  []byte
+	HandshakeMessages  HandshakeMessages
 	ServerHandshakeSeq int
 	ServerAppSeq       int
 	ClientSequenceNum  int
@@ -278,4 +287,10 @@ type QuicParameters struct {
 	Type   []byte
 	Length []byte
 	Value  []byte
+}
+
+type FragmentTLSPacket struct {
+	Type               int
+	Packet             []byte
+	RemainPacketLength int
 }
