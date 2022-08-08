@@ -112,8 +112,9 @@ type QuicKeyBlock struct {
 //}
 
 type ParsedQuicPacket struct {
-	Packet interface{}
-	Type   int
+	Packet    interface{}
+	RawPacket []byte
+	Type      int
 }
 
 type QuicLongHeader struct {

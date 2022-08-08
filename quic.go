@@ -61,6 +61,9 @@ func ParseRawQuicPacket(packet []byte, protected bool) (rawpacket []ParsedQuicPa
 			initPacket.Length, initPacket.PacketNumber, initPacket.Payload = ReadPacketLengthNumberPayload(
 				packet, initPacket.LongHeader.HeaderByte, protected)
 
+			fmt.Printf("header is %x\n", toByteArr(header))
+			fmt.Printf("packet is %x\n", initPacket.ToHeaderByte(initPacket))
+
 			rawpacket = append(rawpacket, ParsedQuicPacket{
 				Packet: initPacket,
 				Type:   LongPacketTypeInitial,
