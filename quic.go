@@ -33,19 +33,21 @@ func ParseRawQuicPacket(packet []byte, protected bool) (rawpacket []ParsedQuicPa
 		p0 := fmt.Sprintf("%08b", packet[0])
 		// LongHeader = 1 で始まる
 		// ShortHeader = 0 で始まる
-		fmt.Printf("packet type is %s\n", p0[0:1])
+		//fmt.Printf("packet type is %s\n", p0[0:1])
 		switch p0[2:4] {
 		// Initial Packet
 		case "00":
-			// Longヘッダの処理
+			// 変数を宣言
 			var header QuicLongHeader
-			packet, header = ReadLongHeader(packet)
-
-			// Initialパケットの処理
 			var initPacket InitialPacket
+			var parsedInit ParsedQuicPacket
+
+			// Longヘッダの処理
+			packet, header = ReadLongHeader(packet)
+			// Initialパケットの処理
 			initPacket.LongHeader = header
 
-			// Token Lengthが0なら
+			// サーバからのTokenがなければ0をセット、あればセット
 			if bytes.Equal(packet[0:1], []byte{0x00}) {
 				initPacket.TokenLength = packet[0:1]
 				// packetを縮める
@@ -57,36 +59,43 @@ func ParseRawQuicPacket(packet []byte, protected bool) (rawpacket []ParsedQuicPa
 				// packetを縮める
 				packet = packet[2+tokenLength:]
 			}
+			parsedInit.RawPacket = initPacket.ToHeaderByte(initPacket, false)
+
 			// Length~を処理
 			initPacket.Length, initPacket.PacketNumber, initPacket.Payload = ReadPacketLengthNumberPayload(
 				packet, initPacket.LongHeader.HeaderByte, protected)
 
-			fmt.Printf("header is %x\n", toByteArr(header))
-			fmt.Printf("packet is %x\n", initPacket.ToHeaderByte(initPacket))
+			parsedInit.Packet = initPacket
+			parsedInit.RawPacket = append(parsedInit.RawPacket, packet[:sumByteArr(initPacket.Length)+2]...)
+			parsedInit.Type = LongPacketTypeInitial
 
-			rawpacket = append(rawpacket, ParsedQuicPacket{
-				Packet: initPacket,
-				Type:   LongPacketTypeInitial,
-			})
+			rawpacket = append(rawpacket, parsedInit)
+
 			// packetを縮める
 			packet = packet[sumByteArr(initPacket.Length)+2:]
 			i = 0
 		// Handshake Packet
 		case "10":
 			var header QuicLongHeader
-			packet, header = ReadLongHeader(packet)
-			// Longヘッダの処理はここまで
-			// ここからHandshakeパケットの処理、Length以降を埋める
 			var handshake HandshakePacket
+			var parsedHandshake ParsedQuicPacket
+
+			// Longヘッダの処理
+			packet, header = ReadLongHeader(packet)
+
+			// ここからHandshakeパケットの処理、Length以降を埋める
 			handshake.LongHeader = header
+
+			parsedHandshake.RawPacket = handshake.ToHeaderByte(handshake)
 
 			handshake.Length, handshake.PacketNumber, handshake.Payload = ReadPacketLengthNumberPayload(
 				packet, handshake.LongHeader.HeaderByte, true)
 
-			rawpacket = append(rawpacket, ParsedQuicPacket{
-				Packet: handshake,
-				Type:   LongPacketTypeHandshake,
-			})
+			parsedHandshake.Packet = handshake
+			parsedHandshake.RawPacket = append(parsedHandshake.RawPacket, packet[:sumByteArr(handshake.Length)+2]...)
+			parsedHandshake.Type = LongPacketTypeHandshake
+
+			rawpacket = append(rawpacket, parsedHandshake)
 
 			// packetを縮める
 			packet = packet[sumByteArr(handshake.Length)+2:]
@@ -162,10 +171,12 @@ func ReadPacketLengthNumberPayload(packet, headerByte []byte, protected bool) (l
 		length = packet[0:2]
 		pnumber = packet[2:4]
 		payload = packet[4:]
-		//可変長整数のpacket lengthをデコードする
+		// 可変長整数のpacket lengthをデコードする
 		length = DecodeVariableInt([]int{int(length[0]), int(length[1])})
 	} else {
 		length = packet[0:2]
+		// 可変長整数のpacket lengthをデコードする
+		length = DecodeVariableInt([]int{int(length[0]), int(length[1])})
 		// packet lengthで変える
 		if bytes.Equal(headerByte, []byte{0xC3}) {
 			// 4byteのとき
@@ -217,7 +228,7 @@ func UnprotectHeader(pnOffset int, packet, hpkey []byte) []ParsedQuicPacket {
 	for i, _ := range a {
 		packet[pnOffset+i] = a[i]
 	}
-	PrintPacket(packet[0:50], "after packet")
+	PrintPacket(packet, "after packet")
 
 	return ParseRawQuicPacket(packet, false)
 }
@@ -579,7 +590,7 @@ func SkipPaddingFrame(packet []byte) [][]byte {
 	return framesByte
 }
 
-func (*InitialPacket) ToHeaderByte(initPacket InitialPacket) (headerByte []byte) {
+func (*InitialPacket) ToHeaderByte(initPacket InitialPacket, encodeLen bool) (headerByte []byte) {
 	headerByte = toByteArr(initPacket.LongHeader)
 	// set token
 	if bytes.Equal(initPacket.TokenLength, []byte{0x00}) {
@@ -589,9 +600,22 @@ func (*InitialPacket) ToHeaderByte(initPacket InitialPacket) (headerByte []byte)
 		headerByte = append(headerByte, initPacket.Token...)
 	}
 
-	headerByte = append(headerByte, initPacket.Length...)
+	if encodeLen {
+		headerByte = append(headerByte, EncodeVariableInt(int(sumByteArr(initPacket.Length)))...)
+	} else {
+		headerByte = append(headerByte, initPacket.Length...)
+	}
+
 	headerByte = append(headerByte, initPacket.PacketNumber...)
 	return headerByte
+}
+
+func (*HandshakePacket) ToHeaderByte(handshake HandshakePacket) (packet []byte) {
+	packet = toByteArr(handshake.LongHeader)
+	packet = append(packet, handshake.Length...)
+	packet = append(packet, handshake.PacketNumber...)
+
+	return packet
 }
 
 // Initial Packetを生成してTLSの鍵情報と返す
@@ -604,7 +628,7 @@ func CreateInitialPacket(dcid, token []byte, pnum uint) (TLSInfo, []byte) {
 
 	initPacket := NewInitialPacket(dcid, nil, token, pnum, 2)
 	// Padding Frame の長さ = 1252 - LongHeaderのLength - Crypto FrameのLength - 16
-	paddingLength := 1252 - len(initPacket.ToHeaderByte(initPacket)) - len(cryptoByte) - 16
+	paddingLength := 1252 - len(initPacket.ToHeaderByte(initPacket, false)) - len(cryptoByte) - 16
 
 	initPacket.Payload = UnshiftPaddingFrame(cryptoByte, paddingLength)
 	// PayloadのLength + Packet番号のLength + AEADの認証タグ長=16
@@ -613,7 +637,7 @@ func CreateInitialPacket(dcid, token []byte, pnum uint) (TLSInfo, []byte) {
 	initPacket.Length = EncodeVariableInt(length)
 
 	// ヘッダをByteにする
-	headerByte := initPacket.ToHeaderByte(initPacket)
+	headerByte := initPacket.ToHeaderByte(initPacket, false)
 	//fmt.Printf("header is %x\n", headerByte)
 
 	// Padding+Crypto FrameのPayloadを暗号化する
