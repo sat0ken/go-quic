@@ -196,6 +196,7 @@ type TLSInfo struct {
 	MasterSecretInfo   MasterSecretInfo
 	KeyBlock           KeyBlock
 	KeyBlockTLS13      KeyBlockTLS13
+	QuicKeyBlock       QuicKeyBlock
 	HandshakeMessages  HandshakeMessages
 	ServerHandshakeSeq int
 	ServerAppSeq       int

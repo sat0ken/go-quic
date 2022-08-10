@@ -629,6 +629,9 @@ func CreateInitialPacket(dcid, token []byte, pnum uint) (TLSInfo, []byte) {
 	tlsinfo, chelloByte := NewQuicClientHello()
 	cryptoByte := toByteArr(NewQuicCryptoFrame(chelloByte))
 
+	// set quic keyblock
+	tlsinfo.QuicKeyBlock = keyblock
+
 	initPacket := NewInitialPacket(dcid, nil, token, pnum, 2)
 	// Padding Frame の長さ = 1252 - LongHeaderのLength - Crypto FrameのLength - 16
 	paddingLength := 1252 - len(initPacket.ToHeaderByte(initPacket, false)) - len(cryptoByte) - 16
