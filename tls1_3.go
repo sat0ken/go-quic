@@ -1,6 +1,7 @@
 package quic
 
 import (
+	"bytes"
 	"crypto"
 	"crypto/rsa"
 	"crypto/sha256"
@@ -389,4 +390,19 @@ func readCertificates(packet []byte) []*x509.Certificate {
 	}
 	fmt.Println("証明書マジ正しい！")
 	return certificates
+}
+
+func GenerateCommonKey(tlsexts []TLSExtensions, clientKey []byte) []byte {
+	var serverKey []byte
+
+	for _, v := range tlsexts {
+		// TLS ExtensionのKey_share
+		if bytes.Contains(v.Type, []byte{TLSExtKeyShare}) {
+			serverKey = v.Value.(KeyShareExtension).KeyExchange
+		}
+	}
+
+	commonKey, _ := curve25519.X25519(clientKey, serverKey)
+
+	return commonKey
 }

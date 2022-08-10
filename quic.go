@@ -216,11 +216,10 @@ func UnprotectHeader(pnOffset int, packet, hpkey []byte) []ParsedQuicPacket {
 	// 保護されているヘッダの最下位4bitを解除する
 	packet[0] ^= encsample[0] & 0x0f
 	pnlength := (packet[0] & 0x03) + 1
-	fmt.Printf("packet number length is %d\n", pnlength)
-	PrintPacket(encsample, "encsample")
+	//fmt.Printf("packet number length is %d\n", pnlength)
 	a := packet[pnOffset : pnOffset+int(pnlength)]
 	b := encsample[1 : 1+pnlength]
-	fmt.Printf("a is %x, b is %x\n", a, b)
+	//fmt.Printf("a is %x, b is %x\n", a, b)
 	for i, _ := range a {
 		a[i] ^= b[i]
 	}
@@ -228,7 +227,6 @@ func UnprotectHeader(pnOffset int, packet, hpkey []byte) []ParsedQuicPacket {
 	for i, _ := range a {
 		packet[pnOffset+i] = a[i]
 	}
-	PrintPacket(packet, "after packet")
 
 	return ParseRawQuicPacket(packet, false)
 }
@@ -600,6 +598,7 @@ func (*InitialPacket) ToHeaderByte(initPacket InitialPacket, encodeLen bool) (he
 		headerByte = append(headerByte, initPacket.Token...)
 	}
 
+	// パケットのLengthを可変長整数でエンコードして返す
 	if encodeLen {
 		headerByte = append(headerByte, EncodeVariableInt(int(sumByteArr(initPacket.Length)))...)
 	} else {
