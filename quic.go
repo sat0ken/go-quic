@@ -86,7 +86,7 @@ func ParseRawQuicPacket(packet []byte, protected bool) (rawpacket []ParsedQuicPa
 			// ここからHandshakeパケットの処理、Length以降を埋める
 			handshake.LongHeader = header
 
-			parsedHandshake.RawPacket = handshake.ToHeaderByte(handshake)
+			parsedHandshake.RawPacket = handshake.ToHeaderByte(handshake, false)
 
 			handshake.Length, handshake.PacketNumber, handshake.Payload = ReadPacketLengthNumberPayload(
 				packet, handshake.LongHeader.HeaderByte, true)
@@ -609,9 +609,13 @@ func (*InitialPacket) ToHeaderByte(initPacket InitialPacket, encodeLen bool) (he
 	return headerByte
 }
 
-func (*HandshakePacket) ToHeaderByte(handshake HandshakePacket) (packet []byte) {
+func (*HandshakePacket) ToHeaderByte(handshake HandshakePacket, encodeLen bool) (packet []byte) {
 	packet = toByteArr(handshake.LongHeader)
-	packet = append(packet, handshake.Length...)
+	if encodeLen {
+		packet = append(packet, EncodeVariableInt(int(sumByteArr(handshake.Length)))...)
+	} else {
+		packet = append(packet, handshake.Length...)
+	}
 	packet = append(packet, handshake.PacketNumber...)
 
 	return packet
