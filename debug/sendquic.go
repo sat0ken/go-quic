@@ -10,28 +10,22 @@ var localAddr = []byte{127, 0, 0, 1}
 const port = 18443
 
 func main() {
-	//sendinitpacket()
+	sendinitpacket()
 	//fraghandshake()
-	handshakePacket()
+	//handshakePacket()
 }
 
 func sendinitpacket() {
 	dcid := quic.StrtoByte("7b268ba2b1ced2e48ed34a0a38")
 	tlsinfo, packet := quic.CreateInitialPacket(dcid, nil, 0)
-	//quic.PrintPacket(packet, "packet")
-
-	//client := quic.NewUDPSocket()
-	//rawretry := quic.SendToQuicServer(client, packet)
 
 	conn := quic.ConnectQuicServer(localAddr, port)
 	recv := quic.SendQuicPacket(conn, packet)
 
-	//rawretry := quic.StrtoByte("f00000000100045306bcce4d980d67e740d1b668e76b52ca23f64addcda437e05054d512724a31b2f385a03e2dd0eff876df88c5c60c5d3d7315d9128b1c9df3e09494efb8956e6417966fd20d76d6a1e5589e423d4a91aed08131d1759881ef26ce26c84fe417b8e7e5d4becff564572c6feae8351b")
-	//retry, _ := quic.ParseRawQuicPacket(rawretry, true)
 	retryPacket := recv[0].Packet.(quic.RetryPacket)
 
 	// ServerからのRetryパケットのSource Connection IDをDestination Connection IDとしてInitial Packetを生成する
-	_, retryInit := quic.CreateInitialPacket(retryPacket.LongHeader.SourceConnID, retryPacket.RetryToken, 1)
+	tlsinfo, retryInit := quic.CreateInitialPacket(retryPacket.LongHeader.SourceConnID, retryPacket.RetryToken, 1)
 
 	// ここでInitial PacketでServerHelloが、Handshake PacketでCertificateの途中まで返ってくる
 	// recvhandshake[0]にInitial Packet(Server hello), [1]にHandshake Packet(Certificate~)
@@ -39,15 +33,8 @@ func sendinitpacket() {
 
 	// Initial packet を処理する
 	initPacket := recvhandshake[0].Packet.(quic.InitialPacket)
-	startPnumOffset := len(initPacket.ToHeaderByte(initPacket, false)) - 2
-
-	unpInit := quic.UnprotectHeader(startPnumOffset, recvhandshake[0].RawPacket, tlsinfo.QuicKeyBlock.ServerHeaderProtection)
-	init := unpInit[0].Packet.(quic.InitialPacket)
-
-	// Initial Packetを復号
-	plain := quic.DecryptQuicPayload(init.PacketNumber, init.ToHeaderByte(init, true), init.Payload, tlsinfo.QuicKeyBlock)
 	// [0]にACK, [1]にCRYPTO(ServerHello)が入る
-	qframes := quic.ParseQuicFrame(plain)
+	qframes := initPacket.ToPlainQuicPacket(initPacket, recvhandshake[0].RawPacket, tlsinfo)
 
 	var shello quic.ServerHello
 	tlsPackets, isfrag := quic.ParseTLSHandshake(qframes[1].(quic.CryptoFrames).Data)
@@ -60,29 +47,32 @@ func sendinitpacket() {
 	// server hello を追加
 	tlsMessages = append(tlsMessages, qframes[1].(quic.CryptoFrames).Data...)
 	// 鍵導出を実行
-	tls13Keyblock := quic.KeyscheduleToMasterSecret(commonkey, tlsMessages)
+	//tls13Keyblock := quic.KeyscheduleToMasterSecret(commonkey, tlsMessages)
+	tlsinfo.KeyBlockTLS13 = quic.KeyscheduleToMasterSecret(commonkey, tlsMessages)
 
 	// Handshake Packetを処理
 	handshake := recvhandshake[1].Packet.(quic.HandshakePacket)
-	startPnumOffset = len(handshake.ToHeaderByte(handshake, false)) - 2
+	frames := handshake.ToPlainQuicPacket(handshake, recvhandshake[1].RawPacket, tlsinfo)
 
-	unpPacket := quic.UnprotectHeader(startPnumOffset, recvhandshake[1].RawPacket, tls13Keyblock.ServerHandshakeHPKey)
-	unpHandshake := unpPacket[0].Packet.(quic.HandshakePacket)
-	serverkey := quic.QuicKeyBlock{
-		ServerKey: tls13Keyblock.ServerHandshakeKey,
-		ServerIV:  tls13Keyblock.ServerHandshakeIV,
-	}
-
-	plain = quic.DecryptQuicPayload(unpHandshake.PacketNumber, unpHandshake.ToHeaderByte(unpHandshake, true), unpHandshake.Payload, serverkey)
-	fmt.Printf("plain is %x\n", plain)
-
-	frames := quic.ParseQuicFrame(plain)
-	fmt.Printf("%x\n", frames[0].(quic.CryptoFrames).Type)
-	fmt.Printf("%x\n", frames[0].(quic.CryptoFrames).Data)
+	fmt.Printf("Handshake packet CryptoFrames is %x\n", frames[0].(quic.CryptoFrames).Type)
+	fmt.Printf("Handshake packet CryptoFrames's Data is %x\n", frames[0].(quic.CryptoFrames).Data)
 
 	tlsPackets, frag := quic.ParseTLSHandshake(frames[0].(quic.CryptoFrames).Data)
-	fmt.Printf("isfrag %v\n", frag)
-	fmt.Printf("tlsPackets %+v\n", tlsPackets)
+	//fmt.Printf("tlsPackets %+v\n", tlsPackets)
+
+	var fragPacket []quic.ParsedQuicPacket
+	// パケットが途中で途切れてるなら次のパケットを読み込む
+	if frag {
+		fragPacket = quic.ReadNextPacket(conn)
+	}
+
+	fraghs := fragPacket[0].Packet.(quic.HandshakePacket)
+	startPnumOffset := len(fraghs.ToHeaderByte(fraghs, false)) - 2
+	unpPacket := quic.UnprotectHeader(startPnumOffset, fragPacket[0].RawPacket, tlsinfo.KeyBlockTLS13.ServerHandshakeHPKey)
+	unpFragmentHS := unpPacket[0].Packet.(quic.HandshakePacket)
+
+	plain := quic.DecryptQuicPayload(unpFragmentHS.PacketNumber, unpFragmentHS.ToHeaderByte(unpFragmentHS, true), unpFragmentHS.Payload, tlsinfo.QuicKeyBlock)
+	fmt.Printf("fragment packet plain is %x\n", plain)
 
 }
 
@@ -146,23 +136,4 @@ func handshakePacket() {
 
 	// frag が true なら recvをもう1回呼んで次のパケットを読み込む
 
-}
-
-func fraghandshake() {
-	hello := quic.StrtoByte("08000090008e00100014001211717569632d6563686f2d6578616d706c650039007241ae0dff4c11f1b2cd93f99dc5cea1cc0504800800000604800800000704800800000404800c00000802406409024064010480007530030245ac0b011a0c0002101ae14003acb9d4c32fb8ab4ea68e7693000d7b268ba2b1ced2e48ed34a0a380e01040f044a4b30eb10045306bcce2001000b0004240000042000041b308204173082027fa003020102020f059ac2235f09f0f8066c1544ed1a6e300d06092a864886f70d01010b0500305b311e301c060355040a13156d6b6365727420646576656c6f706d656e7420434131183016060355040b0c0f7361746f6b656e407361746f6b656e311f301d06035504030c166d6b63657274207361746f6b656e407361746f6b656e301e170d3232303430323032343930385a170d3234303730323032343930385a304331273025060355040a131e6d6b6365727420646576656c6f706d656e7420636572746966696361746531183016060355040b0c0f7361746f6b656e407361746f6b656e30820122300d06092a864886f70d01010105000382010f003082010a0282010100c708440e307a7e8c40d686be0a258b3bd264ec025cfa651e16bcf22cd11bc44fb9bb5e29e361bf0612727338625783200297f3f5e7bc83abff25f4b2a3783f8ed6bfdff95b1d50490f990125e7a49cfac35de22eb69a1c438184780c71d880805106d9bdcbca5b53183615d9b450123517bf9dfa4e907c2e23abff604abbf97ec33df0154f7a0c6c0eaef7740bc14f810f47db904804b92a7db37f1bff460b486f9f8bc79f72e099fb0757b0e4472f28019688c5a47590ff1ec077f7754227104cfaa9674074c4c2f9458c7d6745609ad5db221a473edb3ed9032713228a278f3d0b81ec6585b9f3b7787889cf3dd11194cf7cb409bea503582c7b285490aa570203010001a370306e300e0603551d0f0101ff0404030205a030130603551d25040c300a06082b06010505070301301f0603551d2304183016801404d98d95143b1c115acc6ca986000253e9c9feb430260603551d11041f301d820a6d792d746c732e636f6d82096c6f63616c686f737487047f000001300d06092a864886f70d01010b0500038201810027d1655962c4f648a79735dfc31461db16b92f2a849d37886e353ee67a94d4d0f85b8c20e2207180d37af551a0a040cac73e5d7cf474b78e6d819afa543c334b2a949f3ef5f45f33e8c07f0e43e4d5f94f11c33d726d32458b87c82bbba12fa1f97aebdddcf5046c450fcef30e08e7bc371d300a0c48f91fe4b1b51de002481acdb15532596974983be65e4f1299cd2a43930c7de9d3c4dcb9f6c94f4f5047487694d4de4e6c08d3a737c3b40a943710c385264bb3b3a40aae1f66d4b54a458a6d5f4691b48112aae3ef6bbb96c002c4d4e8598319baf0fc1b3bdc895e1559f2b5f2748c61998ed182bb7ed43ad4cfd17b44953e571cfc2ccaf632cd1569d43d3fb7262d")
-	i, isfrag := quic.ParseTLSHandshake(hello)
-	fmt.Printf("%v\n", isfrag)
-
-	hello2 := quic.StrtoByte("a4c023b0e10417edafeb03d0df59e797cfa5ec58dc9ccc10d868f39dee0a6af29736b7f1d1ba5506fcb42ca99397a5f4bad7fa34e5470d1606fa99f65a56ca23afa9ae6d712d8030885bc69ed5fcff463aec982585965ca7b3573540fc3b4685cb3e4c287c1632d4aa9860b6e06a963151a7285c46bd8988df1943ee00000f00010408040100b9e4e4195c38fa814824567a0a3a5dbf667c93eb0ac0825d329d2bed57fa473817c47e811b3e803ba8020582ec67fe30d47f06b464e89684f064a0829272162cee7e2e2c692ffbade10bf8708ab6faf6bf5315ae2b200b9aac82d99e7e0dd473ee4ba2593490c4c27bc9caa9033e4e856018ab070d13d7eaca63c2b7a91a2f7d7ab2fef50d4d26fbc53d690c1fbc8ce8131215ccffba292cfcb4072f2a148ec036f0f72a32e16088543f3cb78d1b6762b270a6d23fbb30ca9f800d65f170e62b9cdc32ef1043557ab6ecaa1227478e3d1f7400d63f72f09171f68fb225f6951ca097dcb7e02b8b62e2b1b295bd25bbac7592460bb9fb2ad0a8b5d5f8c6af4bb514000020fa61ec0293c98834f638c818866a8582cb6e1683204bafe1e8f0b22ca2d49b0c")
-
-	certPacket := i[1].(quic.FragmentTLSPacket)
-	certPacket.Packet = append(certPacket.Packet, hello2...)
-
-	//quic.PrintPacket(certPacket.Packet, "Certificate packet")
-	packet, isfrag := quic.ParseTLSHandshake(certPacket.Packet)
-	if !isfrag {
-		fmt.Printf("%+v\n", packet[0])
-		fmt.Printf("%+v\n", packet[1])
-		fmt.Printf("%+v\n", packet[2])
-	}
 }

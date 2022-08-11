@@ -202,7 +202,6 @@ func UnprotectHeader(pnOffset int, packet, hpkey []byte) []ParsedQuicPacket {
 	// RFC9001 5.4.2. ヘッダー保護のサンプル
 	// Packet Numberの0byte目があるoffset
 	sampleOffset := pnOffset + 4
-
 	fmt.Printf("pnOffset is %d, sampleOffset is %d\n", pnOffset, sampleOffset)
 	block, err := aes.NewCipher(hpkey)
 	if err != nil {
@@ -265,7 +264,7 @@ func ProtectHeader(pnOffset int, packet, hpkey []byte) []byte {
 func DecryptQuicPayload(packetNumber, header, payload []byte, keyblock QuicKeyBlock) []byte {
 	// パケット番号で8byteのnonceにする
 	packetnum := extendArrByZero(packetNumber, len(keyblock.ServerIV))
-
+	fmt.Printf("ServerKey is %x, ServerIV is %x\n", keyblock.ServerKey, keyblock.ServerIV)
 	block, _ := aes.NewCipher(keyblock.ServerKey)
 	aesgcm, _ := cipher.NewGCM(block)
 	// IVとxorしたのをnonceにする
@@ -528,43 +527,13 @@ func SendQuicPacket(conn *net.UDPConn, data []byte) []ParsedQuicPacket {
 	return ParseRawQuicPacket(recvBuf[0:n], true)
 }
 
-//func NewUDPSocket() int {
-//	sendfd, err := syscall.Socket(syscall.AF_INET, syscall.SOCK_DGRAM, syscall.IPPROTO_IP)
-//	if err != nil {
-//		log.Fatalf("create socket err : %v\n", err)
-//	}
-//	//syscall.SetsockoptInt(sendfd, syscall.SOL_IP, syscall.IP_MTU_DISCOVER, 2)
-//	// UDP packetを受信するためにbindする
-//	syscall.Bind(sendfd, &syscall.SockaddrInet4{
-//		Addr: [4]byte{127, 0, 0, 1},
-//		Port: 42279,
-//	})
-//	return sendfd
-//}
-//
-//func SendToQuicServer(senfd int, packet []byte) []byte {
-//
-//	addr := syscall.SockaddrInet4{
-//		Addr: [4]byte{127, 0, 0, 1},
-//		Port: 18443,
-//	}
-//	err := syscall.Sendto(senfd, packet, 0, &addr)
-//	if err != nil {
-//		log.Fatalf("send packet err : %v\n", err)
-//	}
-//	//for {
-//	buffer := make([]byte, 65535)
-//	oob := make([]byte, 65535)
-//	n, oobn, _, _, err := syscall.Recvmsg(senfd, buffer, oob, syscall.MSG_OOB)
-//	//n, _, err := syscall.Recvfrom(senfd, buffer, 0)
-//	if err != nil {
-//		log.Fatalf("recv err : %v", err)
-//	}
-//	fmt.Printf("recv packet is %d,  %x\n", n, buffer[:n])
-//	fmt.Printf("recv oob is %x\n", buffer[:oobn])
-//	return buffer[:n]
-//	//}
-//}
+func ReadNextPacket(conn *net.UDPConn) []ParsedQuicPacket {
+	recvBuf := make([]byte, 65535)
+	n, _ := conn.Read(recvBuf)
+	fmt.Printf("recv packet : %x\n", recvBuf[0:n])
+
+	return ParseRawQuicPacket(recvBuf[0:n], true)
+}
 
 // paddingフレームを読み飛ばして、QUICのフレームを配列に入れて返す
 func SkipPaddingFrame(packet []byte) [][]byte {
@@ -656,4 +625,37 @@ func CreateInitialPacket(dcid, token []byte, pnum uint) (TLSInfo, []byte) {
 	protectPacket := ProtectHeader(len(headerByte)-2, packet, keyblock.ClientHeaderProtection)
 
 	return tlsinfo, protectPacket
+}
+
+// Inital packetを復号する。復号して結果をパースしてQuicパケットのframeにして返す。
+func (*InitialPacket) ToPlainQuicPacket(initPacket InitialPacket, rawPacket []byte, tlsinfo TLSInfo) (frames []interface{}) {
+	startPnumOffset := len(initPacket.ToHeaderByte(initPacket, false)) - 2
+
+	// ヘッダ保護を解除したInitial Packetにする
+	parsed := UnprotectHeader(startPnumOffset, rawPacket, tlsinfo.QuicKeyBlock.ServerHeaderProtection)
+	unpInit := parsed[0].Packet.(InitialPacket)
+
+	// Initial Packetのペイロードを復号
+	plain := DecryptQuicPayload(unpInit.PacketNumber, unpInit.ToHeaderByte(unpInit, true), unpInit.Payload, tlsinfo.QuicKeyBlock)
+
+	// 復号した結果をパースしてQuicパケットのFrameにして返す
+	return ParseQuicFrame(plain)
+}
+
+// Handshake packetを復号する。復号して結果をパースしてQuicパケットのframeにして返す。
+func (*HandshakePacket) ToPlainQuicPacket(handshake HandshakePacket, rawpacket []byte, tlsinfo TLSInfo) (frames []interface{}) {
+	startPnumOffset := len(handshake.ToHeaderByte(handshake, false)) - 2
+
+	// 鍵導出で生成したHandshake packet用のヘッダ保護キーでヘッダ保護を解除したパケットにする
+	parsed := UnprotectHeader(startPnumOffset, rawpacket, tlsinfo.KeyBlockTLS13.ServerHandshakeHPKey)
+	unpHandshake := parsed[0].Packet.(HandshakePacket)
+
+	serverkey := QuicKeyBlock{
+		ServerKey: tlsinfo.KeyBlockTLS13.ServerHandshakeKey,
+		ServerIV:  tlsinfo.KeyBlockTLS13.ServerHandshakeIV,
+	}
+	// Handshake packetのpayloadを復号
+	plain := DecryptQuicPayload(unpHandshake.PacketNumber, unpHandshake.ToHeaderByte(unpHandshake, true), unpHandshake.Payload, serverkey)
+	// 復号した結果をパースしてQuicパケットのFrameにして返す
+	return ParseQuicFrame(plain)
 }

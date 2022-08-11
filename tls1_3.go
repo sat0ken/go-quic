@@ -19,12 +19,14 @@ import (
 func genrateClientECDHEKey() ECDHEKeys {
 	// 秘密鍵となる32byteの乱数をセット
 	//clientPrivateKey := randomByte(curve25519.ScalarSize)
-	//clientPrivateKey := noRandomByte(32)
-	clientPrivateKey := randomByte(32)
+	clientPrivateKey := noRandomByte(32)
+	//clientPrivateKey := randomByte(32)
 
 	// ClientKeyExchangeでサーバに送る公開鍵を生成
-	clientPublicKey, _ := curve25519.X25519(clientPrivateKey, curve25519.Basepoint)
+	//clientPublicKey, _ := curve25519.X25519(clientPrivateKey, curve25519.Basepoint)
+	clientPublicKey := strtoByte("2fe57da347cd62431528daac5fbb290730fff684afc4cfc2ed90995f58cb3b74")
 
+	// デバックが面倒くさいので秘密鍵と公開鍵を固定
 	return ECDHEKeys{
 		PrivateKey: clientPrivateKey,
 		PublicKey:  clientPublicKey,

@@ -144,10 +144,8 @@ func setQuicTLSExtension() ([]byte, ECDHEKeys) {
 	tlsExtension = append(tlsExtension, UintTo2byte(uint16(tls.X25519))...)
 	// keyのLength = 32byte
 	tlsExtension = append(tlsExtension, []byte{0x00, 0x20}...)
-	// 公開鍵を追加
-	pubkey := strtoByte("2fe57da347cd62431528daac5fbb290730fff684afc4cfc2ed90995f58cb3b74")
-	tlsExtension = append(tlsExtension, pubkey...)
-	clientkey.PublicKey = pubkey
+	// 公開鍵を追加()
+	tlsExtension = append(tlsExtension, clientkey.PublicKey...)
 	//tlsExtension = append(tlsExtension, strtoByte("2fe57da347cd62431528daac5fbb290730fff684afc4cfc2ed90995f58cb3b74")...)
 
 	// set length
