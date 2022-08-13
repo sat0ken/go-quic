@@ -6,8 +6,8 @@ import (
 	"fmt"
 )
 
-func NewQuicClientHello() (TLSInfo, []byte) {
-	var tlsinfo TLSInfo
+func NewQuicClientHello() (QuicInfo, []byte) {
+	var tlsinfo QuicInfo
 	handshake := ClientHello{
 		HandshakeType:   []byte{HandshakeTypeClientHello},
 		Length:          []byte{0x00, 0x00, 0x00},
@@ -50,7 +50,7 @@ func NewQuicClientHello() (TLSInfo, []byte) {
 	//hello = append(hello, handshakebyte...)
 
 	// ClientHelloを保存しておく
-	tlsinfo.HandshakeMessages.ClientHello = handshakebyte
+	tlsinfo.HandshakeMessages = handshakebyte
 
 	return tlsinfo, handshakebyte
 }

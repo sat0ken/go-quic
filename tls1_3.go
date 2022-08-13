@@ -90,7 +90,7 @@ func setTLS13Extension(http2 bool) ([]byte, ECDHEKeys) {
 }
 
 // https://pkg.go.dev/golang.org/x/crypto@v0.0.0-20220411220226-7b82a4e95df4/chacha20poly1305
-func DecryptChacha20(message []byte, tlsinfo TLSInfo) []byte {
+func DecryptChacha20(message []byte, tlsinfo QuicInfo) []byte {
 	header := message[0:5]
 	chipertext := message[5:]
 	var key, iv, nonce []byte
@@ -122,7 +122,7 @@ func DecryptChacha20(message []byte, tlsinfo TLSInfo) []byte {
 	return plaintext
 }
 
-func EncryptChacha20(message []byte, tlsinfo TLSInfo) []byte {
+func EncryptChacha20(message []byte, tlsinfo QuicInfo) []byte {
 	var key, iv, nonce []byte
 
 	// Finishedメッセージを送るとき
@@ -271,8 +271,8 @@ func KeyscheduleToMasterSecret(sharedkey, handshake_messages []byte) KeyBlockTLS
 	}
 }
 
-func KeyscheduleToAppTraffic(tlsinfo TLSInfo) TLSInfo {
-	hash_messages := WriteHash(toByteArr(tlsinfo.HandshakeMessages))
+func KeyscheduleToAppTraffic(tlsinfo QuicInfo) QuicInfo {
+	hash_messages := WriteHash(tlsinfo.HandshakeMessages)
 	fmt.Printf("hashed messages is %x\n", hash_messages)
 
 	zero := noRandomByte(32)
@@ -284,13 +284,15 @@ func KeyscheduleToAppTraffic(tlsinfo TLSInfo) TLSInfo {
 	fmt.Printf("SERVER_TRAFFIC_SECRET_0 %x %x\n", zero, saptraffic)
 
 	// 7.3. トラフィックキーの計算, Application用
-	tlsinfo.KeyBlockTLS13.ClientAppKey = hkdfExpandLabel(captraffic, []byte(`key`), nil, 32)
-	tlsinfo.KeyBlockTLS13.ClientAppIV = hkdfExpandLabel(captraffic, []byte(`iv`), nil, 12)
-	fmt.Printf("clientAppKey and IV is : %x, %x\n", tlsinfo.KeyBlockTLS13.ClientAppKey, tlsinfo.KeyBlockTLS13.ClientAppIV)
+	tlsinfo.KeyBlockTLS13.ClientAppHPKey = hkdfExpandLabel(captraffic, quicHPLabel, nil, 16)
+	tlsinfo.KeyBlockTLS13.ClientAppKey = hkdfExpandLabel(captraffic, quicKeyLabel, nil, 16)
+	tlsinfo.KeyBlockTLS13.ClientAppIV = hkdfExpandLabel(captraffic, quicIVLabel, nil, 12)
+	fmt.Printf("client AppKey is %x, IV is %x, HPKey is %x\n", tlsinfo.KeyBlockTLS13.ClientAppKey, tlsinfo.KeyBlockTLS13.ClientAppIV, tlsinfo.KeyBlockTLS13.ClientAppHPKey)
 
-	tlsinfo.KeyBlockTLS13.ServerAppKey = hkdfExpandLabel(saptraffic, []byte(`key`), nil, 32)
-	tlsinfo.KeyBlockTLS13.ServerAppIV = hkdfExpandLabel(saptraffic, []byte(`iv`), nil, 12)
-	fmt.Printf("serverAppkey and IV is : %x, %x\n", tlsinfo.KeyBlockTLS13.ServerAppKey, tlsinfo.KeyBlockTLS13.ServerAppIV)
+	tlsinfo.KeyBlockTLS13.ServerAppHPKey = hkdfExpandLabel(saptraffic, quicHPLabel, nil, 16)
+	tlsinfo.KeyBlockTLS13.ServerAppKey = hkdfExpandLabel(saptraffic, quicKeyLabel, nil, 16)
+	tlsinfo.KeyBlockTLS13.ServerAppIV = hkdfExpandLabel(saptraffic, quicIVLabel, nil, 12)
+	fmt.Printf("server Appkey is %x, IV is %x, HPKey is %x\n", tlsinfo.KeyBlockTLS13.ServerAppKey, tlsinfo.KeyBlockTLS13.ServerAppIV, tlsinfo.KeyBlockTLS13.ServerAppHPKey)
 
 	return tlsinfo
 }

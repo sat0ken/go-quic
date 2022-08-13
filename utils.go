@@ -185,8 +185,8 @@ func sumByteArr(arr []byte) uint {
 	return sum
 }
 
-func SumLengthByte(arr []byte) uint {
-	return sumByteArr(arr)
+func SumLengthByte(arr []byte) int {
+	return int(sumByteArr(arr))
 }
 
 // 各構造体のフィールドが持つbyteをflatな配列にする

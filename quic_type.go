@@ -112,9 +112,10 @@ type QuicKeyBlock struct {
 //}
 
 type ParsedQuicPacket struct {
-	Packet    interface{}
-	RawPacket []byte
-	Type      int
+	Packet     interface{}
+	RawPacket  []byte
+	HeaderType int
+	PacketType int
 }
 
 type QuicLongHeader struct {
@@ -126,7 +127,7 @@ type QuicLongHeader struct {
 	SourceConnID       []byte
 }
 
-type QuicShortHeaderPacket struct {
+type QuicShortHeader struct {
 	HeaderByte   []byte
 	DestConnID   []byte
 	PacketNumber []byte

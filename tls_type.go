@@ -190,20 +190,20 @@ type HandshakeMessages struct {
 	FinishedMessage     []byte
 }
 
-type TLSInfo struct {
+type QuicInfo struct {
 	State              int
 	Version            []byte
 	MasterSecretInfo   MasterSecretInfo
-	KeyBlock           KeyBlock
 	KeyBlockTLS13      KeyBlockTLS13
 	QuicKeyBlock       QuicKeyBlock
-	HandshakeMessages  HandshakeMessages
+	HandshakeMessages  []byte
 	ServerHandshakeSeq int
 	ServerAppSeq       int
 	ClientSequenceNum  int
 	ClientHandshakeSeq int
 	ClientAppSeq       int
 	ECDHEKeys          ECDHEKeys
+	CryptoFrameOffset  int
 }
 
 type ECDHEKeys struct {
