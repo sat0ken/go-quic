@@ -203,6 +203,15 @@ type QuicInfo struct {
 	ClientHandshakeSeq int
 	ClientAppSeq       int
 	ECDHEKeys          ECDHEKeys
+	QuicPacketInfo     QuicPacketInfo
+}
+
+type QuicPacketInfo struct {
+	DestinationConnID  []byte
+	SourceConnID       []byte
+	Token              []byte
+	PacketNumber       int
+	PacketNumberLength int
 	CryptoFrameOffset  int
 }
 

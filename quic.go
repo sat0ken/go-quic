@@ -350,6 +350,7 @@ func EncryptClientPayload(packetNumber, header, payload []byte, keyblock QuicKey
 	for i, _ := range packetnum {
 		packetnum[i] ^= keyblock.ClientIV[i]
 	}
+	fmt.Printf("key is %x, nonce is %x, add is %x\n", keyblock.ClientKey, packetnum, header)
 	// AES-128-GCMで暗号化する
 	block, _ := aes.NewCipher(keyblock.ClientKey)
 	aesgcm, _ := cipher.NewGCM(block)
@@ -445,7 +446,7 @@ func ParseQuicFrame(packet []byte, offset int) (frame []interface{}) {
 }
 
 // Inital Packetを生成する
-func NewInitialPacket(destConnID, sourceConnID, token []byte, pnum, pnumlen uint) InitialPacket {
+func NewInitialPacket(destConnID, sourceConnID, token []byte, pnum, pnumlen int) (initPacket InitialPacket) {
 	// とりあえず2byte
 	var packetNum []byte
 	if pnumlen == 2 {
@@ -485,7 +486,6 @@ func NewInitialPacket(destConnID, sourceConnID, token []byte, pnum, pnumlen uint
 		longHeader.SourceConnID = sourceConnID
 	}
 
-	var initPacket InitialPacket
 	initPacket.LongHeader = longHeader
 	// トークンをセット
 	// トークンがnilならLengthに0だけをセットする
@@ -504,7 +504,7 @@ func NewInitialPacket(destConnID, sourceConnID, token []byte, pnum, pnumlen uint
 	return initPacket
 }
 
-func (*HandshakePacket) NewHandshakePacket(destConnID, sourceConnID []byte, pnum, pnumlen uint) HandshakePacket {
+func (*HandshakePacket) NewHandshakePacket(destConnID, sourceConnID []byte, pnum, pnumlen uint) (handshake HandshakePacket) {
 	// とりあえず2byte
 	var packetNum []byte
 	if pnumlen == 2 {
@@ -536,7 +536,6 @@ func (*HandshakePacket) NewHandshakePacket(destConnID, sourceConnID []byte, pnum
 		longHeader.SourceConnID = sourceConnID
 	}
 
-	var handshake HandshakePacket
 	handshake.LongHeader = longHeader
 	handshake.PacketNumber = packetNum
 
@@ -679,7 +678,7 @@ func (*QuicShortHeader) ToHeaderByte(short QuicShortHeader) (header []byte) {
 }
 
 // Initial Packetを生成してTLSの鍵情報と返す
-func CreateInitialPacket(dcid, token []byte, pnum uint) (QuicInfo, []byte) {
+func CreateInitialPacket(dcid, token []byte, pnum int) (QuicInfo, []byte) {
 	// Destination Connection IDからInitial Packetの暗号化に使う鍵を生成する
 	keyblock := CreateQuicInitialSecret(dcid)
 
@@ -703,7 +702,7 @@ func CreateInitialPacket(dcid, token []byte, pnum uint) (QuicInfo, []byte) {
 	headerByte := initPacket.ToHeaderByte(initPacket, false)
 	//fmt.Printf("header is %x\n", headerByte)
 
-	// Padding+Crypto FrameのPayloadを暗号化する
+	// PaddingとCrypto FrameのPayloadを暗号化する
 	encpayload := EncryptClientPayload(initPacket.PacketNumber, headerByte, initPacket.Payload, keyblock)
 
 	// 暗号化したPayloadをヘッダとくっつける
@@ -713,6 +712,32 @@ func CreateInitialPacket(dcid, token []byte, pnum uint) (QuicInfo, []byte) {
 	protectPacket := ProtectHeader(len(headerByte)-2, packet, keyblock.ClientHeaderProtection, true)
 
 	return quicinfo, protectPacket
+}
+
+func CreateInitialAckPacket(quicinfo QuicInfo) []byte {
+
+	dcid := strtoByte("4a4b30eb")
+	initPacket := NewInitialPacket(dcid, nil, quicinfo.QuicPacketInfo.Token, quicinfo.QuicPacketInfo.PacketNumber, quicinfo.QuicPacketInfo.PacketNumber)
+	ack := []byte{0x02, 0x00, 0x00, 0x00, 0x00}
+
+	// Padding Frame の長さ = 1252 - LongHeaderのLength - Crypto FrameのLength - 16
+	paddingLength := 1252 - len(initPacket.ToHeaderByte(initPacket, false)) - len(ack) - 16
+	// PaddingしてPacket Sizeを増やす
+	initPacket.Payload = AppendPaddingFrame(ack, paddingLength)
+	// PayloadのLength + Packet番号のLength + AEADの認証タグ長=16
+	length := len(initPacket.Payload) + len(initPacket.PacketNumber) + 16
+	// 可変長整数のエンコードをしてLengthをセット
+	initPacket.Length = EncodeVariableInt(length)
+	// ヘッダをByteにする
+	headerByte := initPacket.ToHeaderByte(initPacket, false)
+	// PaddingとACK FrameのPayloadを暗号化する
+	encpayload := EncryptClientPayload(initPacket.PacketNumber, headerByte, initPacket.Payload, quicinfo.QuicKeyBlock)
+
+	// 暗号化したPayloadをヘッダとくっつける
+	packet := headerByte
+	packet = append(packet, encpayload...)
+	// ヘッダ内のPacket Number Lengthの2bitとPacket Numberを暗号化する
+	return ProtectHeader(len(headerByte)-2, packet, quicinfo.QuicKeyBlock.ClientHeaderProtection, true)
 }
 
 // Inital packetを復号する。復号して結果をパースしてQuicパケットのframeにして返す。
@@ -727,7 +752,7 @@ func (*InitialPacket) ToPlainQuicPacket(initPacket InitialPacket, rawPacket []by
 	plain := DecryptQuicPayload(unpInit.PacketNumber, unpInit.ToHeaderByte(unpInit, true), unpInit.Payload, quicinfo.QuicKeyBlock)
 
 	// 復号した結果をパースしてQuicパケットのFrameにして返す
-	return ParseQuicFrame(plain, quicinfo.CryptoFrameOffset)
+	return ParseQuicFrame(plain, quicinfo.QuicPacketInfo.CryptoFrameOffset)
 }
 
 // Handshake packetを復号する。復号して結果をパースしてQuicパケットのframeにして返す。
@@ -745,7 +770,7 @@ func (*HandshakePacket) ToPlainQuicPacket(handshake HandshakePacket, rawpacket [
 	// Handshake packetのpayloadを復号
 	plain := DecryptQuicPayload(unpHandshake.PacketNumber, unpHandshake.ToHeaderByte(unpHandshake, true), unpHandshake.Payload, serverkey)
 	// 復号した結果をパースしてQuicパケットのFrameにして返す
-	return ParseQuicFrame(plain, quicinfo.CryptoFrameOffset)
+	return ParseQuicFrame(plain, quicinfo.QuicPacketInfo.CryptoFrameOffset)
 }
 
 func (*QuicShortHeader) ToPlainQuicPacket(short QuicShortHeader, rawpacket []byte, quicinfo QuicInfo) (frames []interface{}) {

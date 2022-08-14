@@ -179,10 +179,3 @@ type NewConnectionIdFrame struct {
 	ConnectionID        []byte
 	StatelessResetToken []byte
 }
-
-type UDPInfo struct {
-	ClientAddr []byte
-	ClientPort int
-	ServerAddr []byte
-	ServerPort int
-}
