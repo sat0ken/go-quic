@@ -130,17 +130,6 @@ func WriteHash(message []byte) []byte {
 	return hasher.Sum(nil)
 }
 
-// zeroSource is an io.Reader that returns an unlimited number of zero bytes.
-type ZeroSource struct{}
-
-func (ZeroSource) Read(b []byte) (n int, err error) {
-	for i := range b {
-		b[i] = 0
-	}
-
-	return len(b), nil
-}
-
 func extendArrByZero(data []byte, to int) []byte {
 	var extend []byte
 	for i := 0; i < to-len(data); i++ {
@@ -150,6 +139,7 @@ func extendArrByZero(data []byte, to int) []byte {
 	return extend
 }
 
+// Paddingを後ろに入れる
 func AppendPaddingFrame(data []byte, to int) []byte {
 	var extend []byte
 	for i := 0; i < to; i++ {
@@ -159,7 +149,7 @@ func AppendPaddingFrame(data []byte, to int) []byte {
 	return data
 }
 
-//Paddingを入れる
+// Paddingを前に入れる
 func UnshiftPaddingFrame(data []byte, to int) []byte {
 	var extend []byte
 	for i := 0; i < to; i++ {

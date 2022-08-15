@@ -190,7 +190,7 @@ type HandshakeMessages struct {
 	FinishedMessage     []byte
 }
 
-type QuicInfo struct {
+type TLSInfo struct {
 	State              int
 	Version            []byte
 	MasterSecretInfo   MasterSecretInfo
@@ -203,10 +203,10 @@ type QuicInfo struct {
 	ClientHandshakeSeq int
 	ClientAppSeq       int
 	ECDHEKeys          ECDHEKeys
-	QuicPacketInfo     QuicPacketInfo
+	QPacketInfo        QPacketInfo
 }
 
-type QuicPacketInfo struct {
+type QPacketInfo struct {
 	DestinationConnID  []byte
 	SourceConnID       []byte
 	Token              []byte

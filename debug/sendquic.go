@@ -32,18 +32,19 @@ func _() {
 }
 
 func main() {
-	var quicinfo quic.QuicInfo
+	var tlsinfo quic.TLSInfo
 
 	dcid := quic.StrtoByte("5306bcce")
 	token := quic.StrtoByte("4d980d67e740d1b668e76b52ca23f64addcda437e05054d512724a31b2f385a03e2dd0eff876df88c5c60c5d3d7315d9128b1c9df3e09494efb8956e6417966fd20d76d6a1e5589e423d4a91aed08131d1759881ef26ce26c84fe4")
 
-	quicinfo.QuicKeyBlock = quic.CreateQuicInitialSecret(dcid)
-	quicinfo.QuicPacketInfo.PacketNumber = 2
-	quicinfo.QuicPacketInfo.PacketNumberLength = 2
-	quicinfo.QuicPacketInfo.DestinationConnID = dcid
-	quicinfo.QuicPacketInfo.Token = token
+	tlsinfo.QuicKeyBlock = quic.CreateQuicInitialSecret(dcid)
+	tlsinfo.QPacketInfo.PacketNumber = 2
+	tlsinfo.QPacketInfo.PacketNumberLength = 2
+	tlsinfo.QPacketInfo.DestinationConnID = dcid
+	tlsinfo.QPacketInfo.Token = token
 
-	quic.CreateInitialAckPacket(quicinfo)
+	var init quic.InitialPacket
+	init.CreateInitialAckPacket(tlsinfo)
 }
 
 func _() {
@@ -76,25 +77,43 @@ func _() {
 }
 
 func sendinitpacket() {
-	dcid := quic.StrtoByte("7b268ba2b1ced2e48ed34a0a38")
-	tlsinfo, packet := quic.CreateInitialPacket(dcid, nil, 0)
+	var tlsinfo quic.TLSInfo
+	var init quic.InitialPacket
+	var packet, retryInit []byte
+
+	tlsinfo.QPacketInfo = quic.QPacketInfo{
+		DestinationConnID:  quic.StrtoByte("7b268ba2b1ced2e48ed34a0a38"),
+		SourceConnID:       nil,
+		Token:              nil,
+		PacketNumber:       0,
+		PacketNumberLength: 2,
+		CryptoFrameOffset:  0,
+	}
+
+	tlsinfo, packet = init.CreateInitialPacket(tlsinfo)
 
 	conn := quic.ConnectQuicServer(localAddr, port)
 	recv := quic.SendQuicPacket(conn, packet)
 
+	// Packet NumberをIncrementする
+	tlsinfo.QPacketInfo.PacketNumber++
+
 	retryPacket := recv[0].Packet.(quic.RetryPacket)
 
 	// ServerからのRetryパケットのSource Connection IDをDestination Connection IDとしてInitial Packetを生成する
-	tlsinfo, retryInit := quic.CreateInitialPacket(retryPacket.LongHeader.SourceConnID, retryPacket.RetryToken, 1)
+	tlsinfo.QPacketInfo.DestinationConnID = retryPacket.LongHeader.SourceConnID
+	tlsinfo.QPacketInfo.Token = retryPacket.RetryToken
+
+	tlsinfo, retryInit = init.CreateInitialPacket(tlsinfo)
 
 	// ここでInitial PacketでServerHelloが、Handshake PacketでCertificateの途中まで返ってくる
 	// recvhandshake[0]にInitial Packet(Server hello), [1]にHandshake Packet(Certificate~)
-	recvhandshake := quic.SendQuicPacket(conn, retryInit)
+	recvPacket := quic.SendQuicPacket(conn, retryInit)
 
 	// Initial packet を処理する
-	initPacket := recvhandshake[0].Packet.(quic.InitialPacket)
-	// [0]にACK, [1]にCRYPTO(ServerHello)が入る
-	qframes := initPacket.ToPlainQuicPacket(initPacket, recvhandshake[0].RawPacket, tlsinfo)
+	recvInitPacket := recvPacket[0].Packet.(quic.InitialPacket)
+	// parseしたQuicパケットのFrames配列で[0]にACK, [1]にCRYPTO(ServerHello)が入る
+	qframes := recvInitPacket.ToPlainQuicPacket(recvInitPacket, recvPacket[0].RawPacket, tlsinfo)
 
 	var shello quic.ServerHello
 	tlsPackets, isfrag := quic.ParseTLSHandshake(qframes[1].(quic.CryptoFrames).Data)
@@ -110,8 +129,8 @@ func sendinitpacket() {
 	tlsinfo.KeyBlockTLS13 = quic.KeyscheduleToMasterSecret(commonkey, tlsinfo.HandshakeMessages)
 
 	// Handshake Packetを処理(Crypto Frame(ServerCertificateの途中まで)
-	handshake := recvhandshake[1].Packet.(quic.HandshakePacket)
-	frames := handshake.ToPlainQuicPacket(handshake, recvhandshake[1].RawPacket, tlsinfo)
+	handshake := recvPacket[1].Packet.(quic.HandshakePacket)
+	frames := handshake.ToPlainQuicPacket(handshake, recvPacket[1].RawPacket, tlsinfo)
 	tlsPackets, frag := quic.ParseTLSHandshake(frames[0].(quic.CryptoFrames).Data)
 
 	var fragPacket []quic.ParsedQuicPacket
@@ -121,7 +140,7 @@ func sendinitpacket() {
 		// [0]にTLSパケットの続き(Certificate, CertificateVerify, Finished)
 		// [1]にShort HeaderのNew Connection ID Frameが3つ
 		fragPacket = quic.ReadNextPacket(conn)
-		tlsinfo.QuicPacketInfo.CryptoFrameOffset = quic.SumLengthByte(frames[0].(quic.CryptoFrames).Length)
+		tlsinfo.QPacketInfo.CryptoFrameOffset = quic.SumLengthByte(frames[0].(quic.CryptoFrames).Length)
 	}
 
 	fraghs := fragPacket[0].Packet.(quic.HandshakePacket)
@@ -141,7 +160,7 @@ func sendinitpacket() {
 	// Application用の鍵導出を行う
 	tlsinfo = quic.KeyscheduleToAppTraffic(tlsinfo)
 
-	unpshort := fragPacket[1].Packet.(quic.QuicShortHeader)
+	unpshort := fragPacket[1].Packet.(quic.ShortHeader)
 	frames = unpshort.ToPlainQuicPacket(unpshort, fragPacket[1].RawPacket, tlsinfo)
 
 	fmt.Printf("new_connection_id is %+v\n", frames[0])

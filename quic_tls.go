@@ -6,8 +6,8 @@ import (
 	"fmt"
 )
 
-func NewQuicClientHello() (QuicInfo, []byte) {
-	var tlsinfo QuicInfo
+func NewQuicClientHello() (ecdheKey ECDHEKeys, clientHelloPacket []byte) {
+
 	handshake := ClientHello{
 		HandshakeType:   []byte{HandshakeTypeClientHello},
 		Length:          []byte{0x00, 0x00, 0x00},
@@ -34,7 +34,7 @@ func NewQuicClientHello() (QuicInfo, []byte) {
 	}
 
 	// TLS1.3のextensionをセット
-	handshake.Extensions, tlsinfo.ECDHEKeys = setQuicTLSExtension()
+	handshake.Extensions, ecdheKey = setQuicTLSExtension()
 	// Quic transport parameterを追加
 	handshake.Extensions = append(handshake.Extensions, setQuicTransportParameters()...)
 	// ExtensionLengthをセット
@@ -43,16 +43,16 @@ func NewQuicClientHello() (QuicInfo, []byte) {
 	// Typeの1byteとLengthの3byteを合計から引く
 	handshake.Length = UintTo3byte(uint32(toByteLen(handshake) - 4))
 	// byteにする
-	handshakebyte := toByteArr(handshake)
+	clientHelloPacket = toByteArr(handshake)
 
 	//var hello []byte
 	//hello = append(hello, NewTLSRecordHeader("Handshake", toByteLen(handshake))...)
 	//hello = append(hello, handshakebyte...)
 
 	// ClientHelloを保存しておく
-	tlsinfo.HandshakeMessages = handshakebyte
+	//tlsinfo.HandshakeMessages = handshakebyte
 
-	return tlsinfo, handshakebyte
+	return ecdheKey, clientHelloPacket
 }
 
 // quic-goが送っていたのをセットする

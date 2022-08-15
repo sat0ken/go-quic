@@ -90,7 +90,7 @@ func setTLS13Extension(http2 bool) ([]byte, ECDHEKeys) {
 }
 
 // https://pkg.go.dev/golang.org/x/crypto@v0.0.0-20220411220226-7b82a4e95df4/chacha20poly1305
-func DecryptChacha20(message []byte, tlsinfo QuicInfo) []byte {
+func DecryptChacha20(message []byte, tlsinfo TLSInfo) []byte {
 	header := message[0:5]
 	chipertext := message[5:]
 	var key, iv, nonce []byte
@@ -122,7 +122,7 @@ func DecryptChacha20(message []byte, tlsinfo QuicInfo) []byte {
 	return plaintext
 }
 
-func EncryptChacha20(message []byte, tlsinfo QuicInfo) []byte {
+func EncryptChacha20(message []byte, tlsinfo TLSInfo) []byte {
 	var key, iv, nonce []byte
 
 	// Finishedメッセージを送るとき
@@ -271,7 +271,7 @@ func KeyscheduleToMasterSecret(sharedkey, handshake_messages []byte) KeyBlockTLS
 	}
 }
 
-func KeyscheduleToAppTraffic(tlsinfo QuicInfo) QuicInfo {
+func KeyscheduleToAppTraffic(tlsinfo TLSInfo) TLSInfo {
 	hash_messages := WriteHash(tlsinfo.HandshakeMessages)
 	fmt.Printf("hashed messages is %x\n", hash_messages)
 

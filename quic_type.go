@@ -118,7 +118,7 @@ type ParsedQuicPacket struct {
 	PacketType int
 }
 
-type QuicLongHeader struct {
+type LongHeader struct {
 	HeaderByte         []byte
 	Version            []byte
 	DestConnIDLength   []byte
@@ -127,7 +127,7 @@ type QuicLongHeader struct {
 	SourceConnID       []byte
 }
 
-type QuicShortHeader struct {
+type ShortHeader struct {
 	HeaderByte   []byte
 	DestConnID   []byte
 	PacketNumber []byte
@@ -135,7 +135,7 @@ type QuicShortHeader struct {
 }
 
 type InitialPacket struct {
-	LongHeader   QuicLongHeader
+	LongHeader   LongHeader
 	TokenLength  []byte
 	Token        []byte
 	Length       []byte
@@ -144,13 +144,13 @@ type InitialPacket struct {
 }
 
 type RetryPacket struct {
-	LongHeader         QuicLongHeader
+	LongHeader         LongHeader
 	RetryToken         []byte
 	RetryIntergrityTag []byte
 }
 
 type HandshakePacket struct {
-	LongHeader   QuicLongHeader
+	LongHeader   LongHeader
 	Length       []byte
 	PacketNumber []byte
 	Payload      []byte
