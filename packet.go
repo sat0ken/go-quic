@@ -257,6 +257,7 @@ func (*ShortHeader) ToPlainQuicPacket(short ShortHeader, rawpacket []byte, tlsin
 		ServerKey: tlsinfo.KeyBlockTLS13.ServerAppKey,
 		ServerIV:  tlsinfo.KeyBlockTLS13.ServerAppIV,
 	}
+
 	plain := DecryptQuicPayload(unpShort.PacketNumber, unpShort.ToHeaderByte(unpShort), unpShort.Payload, serverkey)
 
 	// 復号した結果をパースしてQuicパケットのFrameにして返す
