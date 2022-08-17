@@ -150,7 +150,7 @@ func (*InitialPacket) CreateInitialPacket(tlsinfo TLSInfo) (TLSInfo, []byte) {
 	keyblock := CreateQuicInitialSecret(tlsinfo.QPacketInfo.DestinationConnID)
 
 	tlsinfo.ECDHEKeys, chello = NewQuicClientHello()
-	cryptoByte := toByteArr(NewQuicCryptoFrame(chello))
+	cryptoByte := toByteArr(NewCryptoFrame(chello, true))
 
 	// Packet Numberが0の時だけ、Client Helloのパケットを保存
 	if tlsinfo.QPacketInfo.PacketNumber == 0 {

@@ -156,14 +156,14 @@ type HandshakePacket struct {
 	Payload      []byte
 }
 
-type CryptoFrames struct {
+type CryptoFrame struct {
 	Type   []byte
 	Offset []byte
 	Length []byte
 	Data   []byte
 }
 
-type ACKFrames struct {
+type ACKFrame struct {
 	Type                []byte
 	LargestAcknowledged []byte
 	AckDelay            []byte

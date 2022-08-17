@@ -9,7 +9,7 @@ import (
 	"quic"
 )
 
-func _() {
+func main() {
 	var quicinfo quic.TLSInfo
 	chello := quic.StrtoByte("0100013003030000000000000000000000000000000000000000000000000000000000000000000026c02bc02fc02cc030cca9cca8c009c013c00ac014009c009d002f0035c012000a130113021303010000e10000000e000c0000096c6f63616c686f7374000500050100000000000a000a0008001d001700180019000b00020100000d001a0018080404030807080508060401050106010503060302010203ff0100010000100014001211717569632d6563686f2d6578616d706c6500120000002b0003020304003300260024001d00202fe57da347cd62431528daac5fbb290730fff684afc4cfc2ed90995f58cb3b740039003e420b041fad788e0504800800000604800800000704800800000404800c00000802406409024064010480007530030245ac0b011a0c000e01040f00200100")
 	serverHello := quic.StrtoByte("020000560303000000000000000000000000000000000000000000000000000000000000000000130100002e002b0002030400330024001d00202fe57da347cd62431528daac5fbb290730fff684afc4cfc2ed90995f58cb3b74")
@@ -49,11 +49,14 @@ func _() {
 
 	plain := quic.DecryptQuicPayload(unpshort.PacketNumber, unpshort.ToHeaderByte(unpshort), unpshort.Payload, keyblock)
 	newconn := quic.ParseQuicFrame(plain, 0)
-	fmt.Printf("plain is %+v\n", newconn)
+	fmt.Printf("new connection id is %+v\n", newconn)
+
+	fin := quic.CreateClientFinished(quicinfo.HandshakeMessages, quicinfo.KeyBlockTLS13.ClientFinishedKey)
+	fmt.Printf("finished crypto frame is %x\n", quic.ToPacket(fin))
 
 }
 
-func main() {
+func _() {
 
 	var tlsinfo quic.TLSInfo
 	var init quic.InitialPacket
@@ -91,13 +94,13 @@ func main() {
 	qframes := recvInitPacket.ToPlainQuicPacket(recvInitPacket, recvPacket[0].RawPacket, tlsinfo)
 
 	var shello quic.ServerHello
-	tlsPackets, isfrag := quic.ParseTLSHandshake(qframes[1].(quic.CryptoFrames).Data)
+	tlsPackets, isfrag := quic.ParseTLSHandshake(qframes[1].(quic.CryptoFrame).Data)
 	if !isfrag {
 		shello = tlsPackets[0].(quic.ServerHello)
 	}
 	commonkey := quic.GenerateCommonKey(shello.TLSExtensions, tlsinfo.ECDHEKeys.PrivateKey)
 	// server hello を追加
-	tlsinfo.HandshakeMessages = append(tlsinfo.HandshakeMessages, qframes[1].(quic.CryptoFrames).Data...)
+	tlsinfo.HandshakeMessages = append(tlsinfo.HandshakeMessages, qframes[1].(quic.CryptoFrame).Data...)
 	// 鍵導出を実行
 	tlsinfo.KeyBlockTLS13 = quic.KeyscheduleToMasterSecret(commonkey, tlsinfo.HandshakeMessages)
 
@@ -105,7 +108,7 @@ func main() {
 	handshake := recvPacket[1].Packet.(quic.HandshakePacket)
 	frames := handshake.ToPlainQuicPacket(handshake, recvPacket[1].RawPacket, tlsinfo)
 
-	tlsPackets, frag := quic.ParseTLSHandshake(frames[0].(quic.CryptoFrames).Data)
+	tlsPackets, frag := quic.ParseTLSHandshake(frames[0].(quic.CryptoFrame).Data)
 
 	var fragPacket []quic.ParsedQuicPacket
 	// パケットが途中で途切れてるなら次のパケットを読み込む
@@ -114,7 +117,7 @@ func main() {
 		// [0]にTLSパケットの続き(Certificate, CertificateVerify, Finished)
 		// [1]にShort HeaderのNew Connection ID Frameが3つ
 		fragPacket = quic.ParseRawQuicPacket(quic.StrtoByte("ea0000000100044a4b30eb41c1184320f0b3f1c5af2bd489437dc37139b30c1c810134c8a5c82b6723a5d0f7482827a6bfb4d254f5d88fb12afc218b9004f62be63ac36f9dc93f10b4c1e85c0e563037d577975400db6d74db34f60668546ded459c501bf3194207ce227249dcbe31fa844cd397db5af58d63136d0ab9316279f833d8a2183beaa09469e6123383eb39c9f96be6c996704858bbc21b2e20ea7faca53cdfe6db656bb1bd7e37a11f05be31058dd5a0d4c980235ce4c8cc348ddad5beda4b8872368cf40acba55239195f9658ed950ed1b8bbe712313029a189b998b7c48c2d5e93a6759d9d6b3e7e9de6b5cc051b90c350b9675e084d584651c7f2d969aea292b770daa4a4e4ea34b70b0b57a5da0088d4f465087803ad5a94ac79c5e30a63156e77e7f93851591fc262e3c5439f379a56bb34e012ac3fc94c86177d9311e1a98a1fffd896de7bdfec06acf135f72d30896b07f9d4bc4e6b6ae9ebeee52aaa178e65f8d14f6003d0226a395ec6b6f8c69de5c0d3a61fccfbb0523c40504dd8058bdb125a6f317f802dc3fd0d1e7a5dececa9d1016db873ab2cc32ba218cca61210bd8977c512c91f676dcd07dc06a2a94376ffabc6774d9240d2f1e06f6ec8f551490318ff03cf925b1c83105391af6659528a0608870a0f71b8db45bf73fe653d0fa02f2cb1191f74891ad12255b75291c42f765b6c561c92af6f951ba68eaa0f7e5d74b5178636b1474c15a77bc254bb5123e06522f80a5ba611ab871bdaa6dc228d"), true)
-		tlsinfo.QPacketInfo.CryptoFrameOffset = quic.SumLengthByte(frames[0].(quic.CryptoFrames).Length)
+		tlsinfo.QPacketInfo.CryptoFrameOffset = quic.SumLengthByte(frames[0].(quic.CryptoFrame).Length)
 	}
 	//
 	fraghs := fragPacket[0].Packet.(quic.HandshakePacket)
@@ -122,8 +125,8 @@ func main() {
 
 	// 1つ前のCrypto Frameの途中までのデータに続きのデータをくっつける
 	// Encrypted Extnsions, Server Certificate, Certificate Verify, Finishedの完全なパケットが生成
-	tlsCertificate := frames[0].(quic.CryptoFrames).Data
-	tlsCertificate = append(tlsCertificate, fragedhsframe[0].(quic.CryptoFrames).Data...)
+	tlsCertificate := frames[0].(quic.CryptoFrame).Data
+	tlsCertificate = append(tlsCertificate, fragedhsframe[0].(quic.CryptoFrame).Data...)
 
 	tlspacket, frag := quic.ParseTLSHandshake(tlsCertificate)
 	if !frag {
@@ -242,7 +245,7 @@ func _() {
 	plain := quic.DecryptQuicPayload(handshake.PacketNumber, headerByte, handshake.Payload, serverkey)
 	fmt.Printf("plain  is %x\n", plain)
 
-	frames := quic.ParseQuicFrame(plain, 0)[0].(quic.CryptoFrames)
+	frames := quic.ParseQuicFrame(plain, 0)[0].(quic.CryptoFrame)
 
 	fmt.Printf("frames : %x\n", frames.Data)
 

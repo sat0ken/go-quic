@@ -3,6 +3,7 @@ package quic
 import (
 	"bytes"
 	"crypto"
+	"crypto/hmac"
 	"crypto/rsa"
 	"crypto/sha256"
 	"crypto/tls"
@@ -409,4 +410,26 @@ func GenerateCommonKey(tlsexts []TLSExtensions, clientKey []byte) []byte {
 	commonKey, _ := curve25519.X25519(clientKey, serverKey)
 
 	return commonKey
+}
+
+// TLSのFinished messageを作成する
+// これまでやり取りしたTLSのHandshake messageとFinished用のkeyから32byteのVerify Dataを作成する
+// このVerifyDataを用いてこれまでの通信に改ざんがないことを確認することでTLSハンドシェイクが確立される
+func CreateClientFinished(messages, key []byte) CryptoFrame {
+	var finished []byte
+
+	mac := hmac.New(sha256.New, key)
+	mac.Write(WriteHash(messages))
+	verifydata := mac.Sum(nil)
+
+	// Finished messageを作成
+	// Handshake typeをセット
+	finished = append(finished, HandshakeTypeFinished)
+	// 3byteのlengthをセット
+	finished = append(finished, UintTo3byte(uint32(len(verifydata)))...)
+	// 生成したVerify Dataをセット
+	finished = append(finished, verifydata...)
+
+	// Crypto FrameでFinishedメッセージを包んで返す
+	return NewCryptoFrame(finished, false)
 }

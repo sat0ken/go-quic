@@ -380,7 +380,7 @@ func ParseQuicFrame(packet []byte, offset int) (frame []interface{}) {
 	for i := 0; i < len(packet); i++ {
 		switch packet[0] {
 		case ACK:
-			frame = append(frame, ACKFrames{
+			frame = append(frame, ACKFrame{
 				Type:                packet[0:1],
 				LargestAcknowledged: packet[1:2],
 				AckDelay:            packet[2:3],
@@ -393,7 +393,7 @@ func ParseQuicFrame(packet []byte, offset int) (frame []interface{}) {
 			i = 0
 		case Crypto:
 			if offset == 0 {
-				cframe := CryptoFrames{
+				cframe := CryptoFrame{
 					Type:   packet[0:1],
 					Offset: packet[1:2],
 				}
@@ -406,7 +406,7 @@ func ParseQuicFrame(packet []byte, offset int) (frame []interface{}) {
 				// 0にしてパケットを読み込む
 				i = 0
 			} else {
-				cframe := CryptoFrames{
+				cframe := CryptoFrame{
 					Type: packet[0:1],
 				}
 				encLength := EncodeVariableInt(offset)
@@ -477,13 +477,23 @@ func EncodeVariableInt(length int) []byte {
 	return UintTo2byte(uint16(enc))
 }
 
-func NewQuicCryptoFrame(data []byte) CryptoFrames {
-	return CryptoFrames{
+func NewCryptoFrame(data []byte, encodeLen bool) CryptoFrame {
+
+	crypto := CryptoFrame{
 		Type:   []byte{Crypto},
 		Offset: []byte{0x00},
-		Length: EncodeVariableInt(len(data)),
 		Data:   data,
 	}
+	// trueなら可変長整数でエンコード
+	if encodeLen {
+		crypto.Length = EncodeVariableInt(len(data))
+	} else {
+		// Server helloのCrypto Frameはエンコードしてるけど、FinishedのCrypto Frameはエンコードせずlengthは1byteで送っている
+		// 意味がわからないけどこうする
+		crypto.Length = []byte{byte(len(data))}
+	}
+
+	return crypto
 }
 
 func ConnectQuicServer(server []byte, port int) *net.UDPConn {
