@@ -18,21 +18,21 @@ func main() {
 	var packet, retryInit []byte
 
 	tlsinfo.QPacketInfo = quic.QPacketInfo{
-		DestinationConnID:  quic.StrtoByte("7b268ba2b1ced2e48ed34a0a38"),
-		SourceConnID:       nil,
-		Token:              nil,
-		PacketNumber:       0,
-		PacketNumberLength: 2,
-		CryptoFrameOffset:  0,
+		DestinationConnID:   quic.StrtoByte("7b268ba2b1ced2e48ed34a0a38"),
+		SourceConnID:        nil,
+		Token:               nil,
+		InitialPacketNumber: 0,
+		PacketNumberLength:  2,
+		CryptoFrameOffset:   0,
 	}
 
 	tlsinfo, packet = init.CreateInitialPacket(tlsinfo)
 
 	conn := quic.ConnectQuicServer(localAddr, port)
-	recv := quic.SendQuicPacket(conn, packet)
+	recv := quic.SendQuicPacket(conn, [][]byte{packet})
 
 	// Packet NumberをIncrementする
-	tlsinfo.QPacketInfo.PacketNumber++
+	tlsinfo.QPacketInfo.InitialPacketNumber++
 
 	retryPacket := recv[0].Packet.(quic.RetryPacket)
 
@@ -44,10 +44,12 @@ func main() {
 
 	// ここでInitial PacketでServerHelloが、Handshake PacketでCertificateの途中まで返ってくる
 	// recvhandshake[0]にInitial Packet(Server hello), [1]にHandshake Packet(Certificate~)
-	recvPacket := quic.SendQuicPacket(conn, retryInit)
+	recvPacket := quic.SendQuicPacket(conn, [][]byte{retryInit})
 
 	// Initial packet を処理する
 	recvInitPacket := recvPacket[0].Packet.(quic.InitialPacket)
+	// 送るときに使うので受信したSourceConnIDをDestination Connection IDにセットする
+	tlsinfo.QPacketInfo.DestinationConnID = recvInitPacket.LongHeader.SourceConnID
 	// parseしたQuicパケットのFrames配列で[0]にACK, [1]にCRYPTO(ServerHello)が入る
 	qframes := recvInitPacket.ToPlainQuicPacket(recvInitPacket, recvPacket[0].RawPacket, tlsinfo)
 
@@ -101,9 +103,12 @@ func main() {
 
 	fmt.Printf("new_connection_id is %+v\n", frames[0])
 
-	tlsinfo.QPacketInfo.PacketNumber++
+	tlsinfo.QPacketInfo.InitialPacketNumber++
 	ack := init.CreateInitialAckPacket(tlsinfo)
-	recv = quic.SendQuicPacket(conn, ack)
+	var tlsfin quic.HandshakePacket
+	finpacket := tlsfin.CreateHandshakePacket(tlsinfo)
+	
+	recv = quic.SendQuicPacket(conn, [][]byte{ack, finpacket})
 
 	fmt.Printf("recv packet is %+v\n", recv[0])
 

@@ -10,10 +10,10 @@ const (
 )
 
 const (
-	LongPacketTypeInitial = iota
-	LongPacketTypeORTT
-	LongPacketTypeHandshake
-	LongPacketTypeRetry
+	LongHeaderPacketTypeInitial = iota
+	LongHeaderPacketTypeORTT
+	LongHeaderPacketTypeHandshake
+	LongHeaderPacketTypeRetry
 )
 
 const (
@@ -178,4 +178,15 @@ type NewConnectionIdFrame struct {
 	ConnectionIDLength  []byte
 	ConnectionID        []byte
 	StatelessResetToken []byte
+}
+
+type QPacketInfo struct {
+	DestinationConnID     []byte
+	SourceConnID          []byte
+	Token                 []byte
+	InitialPacketNumber   int
+	HandshakePacketNumber int
+	PacketNumberLength    int
+	CryptoFrameOffset     int
+	AckCount              int
 }

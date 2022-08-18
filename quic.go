@@ -79,7 +79,7 @@ func ParseRawQuicPacket(packet []byte, protected bool) (rawpacket []ParsedQuicPa
 				parsedInit.Packet = initPacket
 				parsedInit.RawPacket = append(parsedInit.RawPacket, packet[:sumByteArr(initPacket.Length)+2]...)
 				parsedInit.HeaderType = 1
-				parsedInit.PacketType = LongPacketTypeInitial
+				parsedInit.PacketType = LongHeaderPacketTypeInitial
 
 				rawpacket = append(rawpacket, parsedInit)
 
@@ -106,7 +106,7 @@ func ParseRawQuicPacket(packet []byte, protected bool) (rawpacket []ParsedQuicPa
 				parsedHandshake.Packet = handshake
 				parsedHandshake.RawPacket = append(parsedHandshake.RawPacket, packet[:sumByteArr(handshake.Length)+2]...)
 				parsedHandshake.HeaderType = 1
-				parsedHandshake.PacketType = LongPacketTypeHandshake
+				parsedHandshake.PacketType = LongHeaderPacketTypeHandshake
 
 				rawpacket = append(rawpacket, parsedHandshake)
 
@@ -125,7 +125,7 @@ func ParseRawQuicPacket(packet []byte, protected bool) (rawpacket []ParsedQuicPa
 				rawpacket = append(rawpacket, ParsedQuicPacket{
 					Packet:     retry,
 					HeaderType: 1,
-					PacketType: LongPacketTypeRetry,
+					PacketType: LongHeaderPacketTypeRetry,
 				})
 				// packetを縮める
 				packet = packet[len(packet):]
@@ -496,6 +496,16 @@ func NewCryptoFrame(data []byte, encodeLen bool) CryptoFrame {
 	return crypto
 }
 
+func NewAckFrame(ackcnt int) ACKFrame {
+	return ACKFrame{
+		Type:                []byte{(ACK)},
+		LargestAcknowledged: []byte{byte(ackcnt)},
+		AckDelay:            []byte{0x00},
+		AckRangeCount:       []byte{0x00},
+		FirstAckRange:       []byte{byte(ackcnt)},
+	}
+}
+
 func ConnectQuicServer(server []byte, port int) *net.UDPConn {
 	serverInfo := net.UDPAddr{
 		IP:   server,
@@ -508,10 +518,12 @@ func ConnectQuicServer(server []byte, port int) *net.UDPConn {
 	return conn
 }
 
-func SendQuicPacket(conn *net.UDPConn, data []byte) []ParsedQuicPacket {
+func SendQuicPacket(conn *net.UDPConn, packets [][]byte) []ParsedQuicPacket {
 	recvBuf := make([]byte, 65535)
 
-	conn.Write(data)
+	for _, v := range packets {
+		conn.Write(v)
+	}
 	n, _ := conn.Read(recvBuf)
 
 	fmt.Printf("recv packet : %x\n", recvBuf[0:n])

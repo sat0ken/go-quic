@@ -10,7 +10,7 @@ import (
 )
 
 func main() {
-	var quicinfo quic.TLSInfo
+	var tlsinfo quic.TLSInfo
 	chello := quic.StrtoByte("0100013003030000000000000000000000000000000000000000000000000000000000000000000026c02bc02fc02cc030cca9cca8c009c013c00ac014009c009d002f0035c012000a130113021303010000e10000000e000c0000096c6f63616c686f7374000500050100000000000a000a0008001d001700180019000b00020100000d001a0018080404030807080508060401050106010503060302010203ff0100010000100014001211717569632d6563686f2d6578616d706c6500120000002b0003020304003300260024001d00202fe57da347cd62431528daac5fbb290730fff684afc4cfc2ed90995f58cb3b740039003e420b041fad788e0504800800000604800800000704800800000404800c00000802406409024064010480007530030245ac0b011a0c000e01040f00200100")
 	serverHello := quic.StrtoByte("020000560303000000000000000000000000000000000000000000000000000000000000000000130100002e002b0002030400330024001d00202fe57da347cd62431528daac5fbb290730fff684afc4cfc2ed90995f58cb3b74")
 	encryptedExtensions := quic.StrtoByte("08000090008e00100014001211717569632d6563686f2d6578616d706c650039007241ae0dff4c11f1b2cd93f99dc5cea1cc0504800800000604800800000704800800000404800c00000802406409024064010480007530030245ac0b011a0c0002101ae14003acb9d4c32fb8ab4ea68e7693000d7b268ba2b1ced2e48ed34a0a380e01040f044a4b30eb10045306bcce200100")
@@ -24,34 +24,40 @@ func main() {
 	commonkey, _ := curve25519.X25519(clientkey, serverkey)
 
 	chello = append(chello, serverHello...)
-	quicinfo.KeyBlockTLS13 = quic.KeyscheduleToMasterSecret(commonkey, chello)
+	tlsinfo.KeyBlockTLS13 = quic.KeyscheduleToMasterSecret(commonkey, chello)
 
 	chello = append(chello, encryptedExtensions...)
 	chello = append(chello, serverCertificate...)
 	chello = append(chello, certificateVerify...)
 	chello = append(chello, finishedMessage...)
-	quicinfo.HandshakeMessages = chello
-	fmt.Printf("tls packet is %x\n", quicinfo.HandshakeMessages)
-	quicinfo = quic.KeyscheduleToAppTraffic(quicinfo)
+	tlsinfo.HandshakeMessages = chello
+	fmt.Printf("tls packet is %x\n", tlsinfo.HandshakeMessages)
+	tlsinfo = quic.KeyscheduleToAppTraffic(tlsinfo)
 
 	rawshort := quic.StrtoByte("5b1c83105391af6659528a0608870a0f71b8db45bf73fe653d0fa02f2cb1191f74891ad12255b75291c42f765b6c561c92af6f951ba68eaa0f7e5d74b5178636b1474c15a77bc254bb5123e06522f80a5ba611ab871bdaa6dc228d")
 	parsed := quic.ParseRawQuicPacket(rawshort, true)
 	shortpacket := parsed[0].Packet.(quic.ShortHeader)
 	startPnumOffset := len(shortpacket.ToHeaderByte(shortpacket)) - 2
 
-	unpPacket := quic.UnprotectHeader(startPnumOffset, parsed[0].RawPacket, quicinfo.KeyBlockTLS13.ServerAppHPKey, false)
+	unpPacket := quic.UnprotectHeader(startPnumOffset, parsed[0].RawPacket, tlsinfo.KeyBlockTLS13.ServerAppHPKey, false)
 	unpshort := unpPacket[0].Packet.(quic.ShortHeader)
 
 	keyblock := quic.QuicKeyBlock{
-		ServerKey: quicinfo.KeyBlockTLS13.ServerAppKey,
-		ServerIV:  quicinfo.KeyBlockTLS13.ServerAppIV,
+		ServerKey: tlsinfo.KeyBlockTLS13.ServerAppKey,
+		ServerIV:  tlsinfo.KeyBlockTLS13.ServerAppIV,
 	}
 
 	plain := quic.DecryptQuicPayload(unpshort.PacketNumber, unpshort.ToHeaderByte(unpshort), unpshort.Payload, keyblock)
 	newconn := quic.ParseQuicFrame(plain, 0)
 	fmt.Printf("new connection id is %+v\n", newconn)
 
-	fin := quic.CreateClientFinished(quicinfo.HandshakeMessages, quicinfo.KeyBlockTLS13.ClientFinishedKey)
+	tlsinfo.QPacketInfo.PacketNumber++
+
+	//var init quic.InitialPacket
+	//ack := init.CreateInitialAckPacket(quicinfo)
+	//fmt.Printf("ack packet is %x\n", ack)
+
+	fin := quic.CreateClientFinished(tlsinfo.HandshakeMessages, tlsinfo.KeyBlockTLS13.ClientFinishedKey)
 	fmt.Printf("finished crypto frame is %x\n", quic.ToPacket(fin))
 
 }

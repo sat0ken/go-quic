@@ -206,15 +206,6 @@ type TLSInfo struct {
 	QPacketInfo        QPacketInfo
 }
 
-type QPacketInfo struct {
-	DestinationConnID  []byte
-	SourceConnID       []byte
-	Token              []byte
-	PacketNumber       int
-	PacketNumberLength int
-	CryptoFrameOffset  int
-}
-
 type ECDHEKeys struct {
 	PrivateKey []byte
 	PublicKey  []byte
