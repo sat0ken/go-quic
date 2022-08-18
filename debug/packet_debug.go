@@ -10,6 +10,31 @@ import (
 )
 
 func main() {
+	p := quic.StrtoByte("0000508ba0e41d139d09b8179a699fd1c1d75f10839bd9ab5f508bed6988b4c7531efdfad867")
+	//p := quic.StrtoByte("568ba0e41d139d09b8179a699f")
+	//p := quic.StrtoByte("0000508b089d5c0b8170dc081a699fd1c1d75f10839bd9ab5f508bed6988b4c7531efdfad867")
+	//p := quic.StrtoByte("0000508798e79a82ae43d3d1c1d75f10839bd9ab5f508bed6988b4c7531efdfad867")
+	headers := quic.DecodeHttp3Header(p)
+
+	for _, v := range headers {
+		fmt.Printf("Header Name is %s, Value is %s\n", v.Name, v.Value)
+	}
+
+	header := quic.CreateHttp3Header(":method", "localhost:18443")
+	//header = append(header, quic.CreateHttp3Header("access-control-request-headers", "content-type")...)
+	//header = append(header, quic.CreateHttp3Header(":status", "204")...)
+	//header = append(header, quic.CreateHttp3Header("early-data", "1")...)
+	//header = append(header, quic.CreateHttp3Header("age", "0")...)
+	//header = append(header, quic.CreateHttp3Header("forwarded", "")...)
+	//header = append(header, quic.CreateHttp3Header("content-encoding", "br")...)
+	//header = append(header, quic.CreateHttp3Header(":method", "quic-go HTTP/3")...)
+
+	fmt.Printf("header is %x\n", header)
+	fmt.Printf("header is %x\n", p)
+
+}
+
+func _() {
 	var tlsinfo quic.TLSInfo
 	chello := quic.StrtoByte("0100013003030000000000000000000000000000000000000000000000000000000000000000000026c02bc02fc02cc030cca9cca8c009c013c00ac014009c009d002f0035c012000a130113021303010000e10000000e000c0000096c6f63616c686f7374000500050100000000000a000a0008001d001700180019000b00020100000d001a0018080404030807080508060401050106010503060302010203ff0100010000100014001211717569632d6563686f2d6578616d706c6500120000002b0003020304003300260024001d00202fe57da347cd62431528daac5fbb290730fff684afc4cfc2ed90995f58cb3b740039003e420b041fad788e0504800800000604800800000704800800000404800c00000802406409024064010480007530030245ac0b011a0c000e01040f00200100")
 	serverHello := quic.StrtoByte("020000560303000000000000000000000000000000000000000000000000000000000000000000130100002e002b0002030400330024001d00202fe57da347cd62431528daac5fbb290730fff684afc4cfc2ed90995f58cb3b74")
@@ -51,7 +76,7 @@ func main() {
 	newconn := quic.ParseQuicFrame(plain, 0)
 	fmt.Printf("new connection id is %+v\n", newconn)
 
-	tlsinfo.QPacketInfo.PacketNumber++
+	tlsinfo.QPacketInfo.InitialPacketNumber++
 
 	//var init quic.InitialPacket
 	//ack := init.CreateInitialAckPacket(quicinfo)
@@ -68,17 +93,17 @@ func _() {
 	var init quic.InitialPacket
 	var initPacket, retryInit []byte
 	tlsinfo.QPacketInfo = quic.QPacketInfo{
-		DestinationConnID:  quic.StrtoByte("7b268ba2b1ced2e48ed34a0a38"),
-		SourceConnID:       nil,
-		Token:              nil,
-		PacketNumber:       0,
-		PacketNumberLength: 2,
-		CryptoFrameOffset:  0,
+		DestinationConnID:   quic.StrtoByte("7b268ba2b1ced2e48ed34a0a38"),
+		SourceConnID:        nil,
+		Token:               nil,
+		InitialPacketNumber: 0,
+		PacketNumberLength:  2,
+		CryptoFrameOffset:   0,
 	}
 	tlsinfo, initPacket = init.CreateInitialPacket(tlsinfo)
 	fmt.Printf("initPacket is %x\n", initPacket)
 	// 1増やす
-	tlsinfo.QPacketInfo.PacketNumber++
+	tlsinfo.QPacketInfo.InitialPacketNumber++
 
 	recv := quic.ParseRawQuicPacket(quic.StrtoByte("f00000000100045306bcce4d980d67e740d1b668e76b52ca23f64addcda437e05054d512724a31b2f385a03e2dd0eff876df88c5c60c5d3d7315d9128b1c9df3e09494efb8956e6417966fd20d76d6a1e5589e423d4a91aed08131d1759881ef26ce26c84fe417b8e7e5d4becff564572c6feae8351b"), true)
 	retryPacket := recv[0].Packet.(quic.RetryPacket)
@@ -149,7 +174,7 @@ func _() {
 
 	fmt.Printf("new_connection_id is %+v\n", frames[0])
 
-	tlsinfo.QPacketInfo.PacketNumber++
+	tlsinfo.QPacketInfo.InitialPacketNumber++
 	ack := init.CreateInitialAckPacket(tlsinfo)
 	fmt.Printf("ACK packet is %x\n", ack)
 
