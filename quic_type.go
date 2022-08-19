@@ -106,11 +106,6 @@ type QuicKeyBlock struct {
 	ServerHeaderProtection []byte
 }
 
-//type QuicRawPacket struct {
-//	QuicHeader interface{}
-//	QuicFrames []interface{}
-//}
-
 type ParsedQuicPacket struct {
 	Packet     interface{}
 	RawPacket  []byte
@@ -156,6 +151,7 @@ type HandshakePacket struct {
 	Payload      []byte
 }
 
+// 19.6. CRYPTO Frames
 type CryptoFrame struct {
 	Type   []byte
 	Offset []byte
@@ -180,13 +176,23 @@ type NewConnectionIdFrame struct {
 	StatelessResetToken []byte
 }
 
+// 19.8. STREAM Frames
+type StreamFrame struct {
+	Type       []byte
+	StreamID   []byte
+	Offset     []byte
+	Length     []byte
+	StreamData []byte
+}
+
 type QPacketInfo struct {
-	DestinationConnID     []byte
-	SourceConnID          []byte
-	Token                 []byte
-	InitialPacketNumber   int
-	HandshakePacketNumber int
-	PacketNumberLength    int
-	CryptoFrameOffset     int
-	AckCount              int
+	DestinationConnID      []byte
+	SourceConnID           []byte
+	Token                  []byte
+	InitialPacketNumber    int // Initialパケットのパケット番号
+	HandshakePacketNumber  int // Handshakeパケットのパケット番号
+	ShortHeaderPacketNmber int // 1RTTパケットのパケット番号
+	PacketNumberLength     int
+	CryptoFrameOffset      int
+	AckCount               int
 }
