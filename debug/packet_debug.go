@@ -21,7 +21,7 @@ func main() {
 	}
 
 	header := quic.CreateHttp3Header(":method", "localhost:18443")
-	//header = append(header, quic.CreateHttp3Header("access-control-request-headers", "content-type")...)
+	header = append(header, quic.CreateHttp3Header("access-control-request-headers", "content-type")...)
 	//header = append(header, quic.CreateHttp3Header(":status", "204")...)
 	//header = append(header, quic.CreateHttp3Header("early-data", "1")...)
 	//header = append(header, quic.CreateHttp3Header("age", "0")...)
@@ -29,8 +29,11 @@ func main() {
 	//header = append(header, quic.CreateHttp3Header("content-encoding", "br")...)
 	//header = append(header, quic.CreateHttp3Header(":method", "quic-go HTTP/3")...)
 
-	fmt.Printf("header is %x\n", header)
-	fmt.Printf("header is %x\n", p)
+	fmt.Printf("header OK %x\n", p)
+	fmt.Printf("header OK 0000%x\n", header)
+
+	fmt.Printf("huffman is %s\n", quic.HuffmanDecode(quic.StrtoByte("a0e41d139d09b8179a699f")))
+	fmt.Printf("huffman is %x\n", quic.HuffmanEncode("localhost:18443"))
 
 }
 

@@ -182,6 +182,7 @@ func getHttp3HeaderIndexByName(name string) (index int) {
 	for k, v := range Http3StaticTable {
 		if v.Name == name {
 			index = k
+			break
 		}
 	}
 	return index
@@ -212,6 +213,7 @@ func CreateHttp3Header(name, value string) (headerByte []byte) {
 		// +-------------------------------+
 
 		index := getHttp3HeaderIndexByName(name)
+		fmt.Printf("index is %d\n", index)
 		headerIndex, _ := strconv.ParseUint(fmt.Sprintf("01%06b", index+1), 2, 8)
 
 		// Huffman codingを意味する1のbitとcodingされたLengthを意味する7bit
