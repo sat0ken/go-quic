@@ -2,6 +2,7 @@ package quic
 
 import (
 	"bytes"
+	"fmt"
 )
 
 func createLongHeader(qinfo QPacketInfo, ptype int) (longHeader LongHeader, packetNum []byte) {
@@ -18,11 +19,12 @@ func createLongHeader(qinfo QPacketInfo, ptype int) (longHeader LongHeader, pack
 	// 11000001 = 0xC1 となる(Initial Packet)
 	// 11100001 = 0xE1 となる(Handshake Packet)
 	var firstByte byte
-	if ptype == LongHeaderPacketTypeInitial {
+	switch ptype {
+	case LongHeaderPacketTypeInitial:
 		// とりあえず2byte
-		if qinfo.PacketNumberLength == 2 {
+		if qinfo.ClientPacketNumberLength == 2 {
 			packetNum = UintTo2byte(uint16(qinfo.InitialPacketNumber))
-		} else if qinfo.PacketNumberLength == 4 {
+		} else if qinfo.ClientPacketNumberLength == 4 {
 			packetNum = UintTo4byte(uint32(qinfo.InitialPacketNumber))
 		}
 		if len(packetNum) == 2 {
@@ -30,10 +32,10 @@ func createLongHeader(qinfo QPacketInfo, ptype int) (longHeader LongHeader, pack
 		} else if len(packetNum) == 4 {
 			firstByte = 0xC3
 		}
-	} else {
-		if qinfo.PacketNumberLength == 2 {
+	case LongHeaderPacketTypeHandshake:
+		if qinfo.ClientPacketNumberLength == 2 {
 			packetNum = UintTo2byte(uint16(qinfo.HandshakePacketNumber))
-		} else if qinfo.PacketNumberLength == 4 {
+		} else if qinfo.ClientPacketNumberLength == 4 {
 			packetNum = UintTo4byte(uint32(qinfo.HandshakePacketNumber))
 		}
 		if len(packetNum) == 2 {
@@ -66,44 +68,6 @@ func createLongHeader(qinfo QPacketInfo, ptype int) (longHeader LongHeader, pack
 
 // Inital Packetのヘッダを生成する
 func NewInitialPacket(qinfo QPacketInfo) (initPacket InitialPacket) {
-	//// とりあえず2byte
-	//var packetNum []byte
-	//if qinfo.PacketNumberLength == 2 {
-	//	packetNum = UintTo2byte(uint16(qinfo.PacketNumber))
-	//} else if qinfo.PacketNumberLength == 4 {
-	//	packetNum = UintTo4byte(uint32(qinfo.PacketNumber))
-	//}
-	//
-	//// パケット番号長が2byteの場合0xC1になる
-	//// 先頭の6bitは110000, 下位の2bitがLenghtを表す
-	//// 1 LongHeader
-	////  1 Fixed bit
-	////   00 Packet Type
-	////     00 Reserved
-	//// 17.2. Long Header Packets
-	//// That is, the length of the Packet Number field is the value of this field plus one.
-	//// 生成するときは1をパケット番号長から引く、2-1は1、2bitの2進数で表すと01
-	//// 11000001 = 0xC1 となる
-	//var firstByte byte
-	//if len(packetNum) == 2 {
-	//	firstByte = 0xC1
-	//} else if len(packetNum) == 4 {
-	//	firstByte = 0xC3
-	//}
-	//// Headerを作る
-	//longHeader := LongHeader{
-	//	HeaderByte:       []byte{firstByte},
-	//	Version:          []byte{0x00, 0x00, 0x00, 0x01},
-	//	DestConnIDLength: []byte{byte(len(qinfo.DestinationConnID))},
-	//	DestConnID:       qinfo.DestinationConnID,
-	//}
-	//// source connectio id をセット
-	//if qinfo.SourceConnID == nil {
-	//	longHeader.SourceConnIDLength = []byte{0x00}
-	//} else {
-	//	longHeader.SourceConnIDLength = []byte{byte(len(qinfo.SourceConnID))}
-	//	longHeader.SourceConnID = qinfo.SourceConnID
-	//}
 
 	initPacket.LongHeader, initPacket.PacketNumber = createLongHeader(qinfo, LongHeaderPacketTypeInitial)
 	// トークンをセット
@@ -123,46 +87,13 @@ func NewInitialPacket(qinfo QPacketInfo) (initPacket InitialPacket) {
 
 // Handshake Packetのヘッダを生成する
 func NewHandshakePacket(qinfo QPacketInfo) (handshake HandshakePacket) {
-	//// とりあえず2byte
-	//var packetNum []byte
-	//if qinfo.PacketNumberLength == 2 {
-	//	packetNum = UintTo2byte(uint16(qinfo.PacketNumber))
-	//} else if qinfo.PacketNumberLength == 4 {
-	//	packetNum = UintTo4byte(uint32(qinfo.PacketNumber))
-	//}
-	//
-	//var firstByte byte
-	//if len(packetNum) == 2 {
-	//	firstByte = 0xC1
-	//} else if len(packetNum) == 4 {
-	//	firstByte = 0xC3
-	//}
-	//// Headerを作る
-	//longHeader := LongHeader{
-	//	HeaderByte: []byte{firstByte},
-	//	Version:    []byte{0x00, 0x00, 0x00, 0x01},
-	//}
-	//// destination connection idをセット
-	//if qinfo.DestinationConnID == nil {
-	//	longHeader.DestConnIDLength = []byte{0x00}
-	//} else {
-	//	longHeader.DestConnIDLength = []byte{byte(len(qinfo.DestinationConnID))}
-	//	longHeader.DestConnID = qinfo.DestinationConnID
-	//}
-	//// source connection id をセット
-	//if qinfo.SourceConnID == nil {
-	//	longHeader.SourceConnIDLength = []byte{0x00}
-	//} else {
-	//	longHeader.SourceConnIDLength = []byte{byte(len(qinfo.SourceConnID))}
-	//	longHeader.SourceConnID = qinfo.SourceConnID
-	//}
 
 	handshake.LongHeader, handshake.PacketNumber = createLongHeader(qinfo, LongHeaderPacketTypeHandshake)
 
 	return handshake
 }
 
-func (*InitialPacket) ToHeaderByte(initPacket InitialPacket, encodeLen bool) (headerByte []byte) {
+func (*InitialPacket) ToHeaderByte(initPacket InitialPacket) (headerByte []byte) {
 	headerByte = toByteArr(initPacket.LongHeader)
 	// set token
 	if bytes.Equal(initPacket.TokenLength, []byte{0x00}) {
@@ -173,23 +104,23 @@ func (*InitialPacket) ToHeaderByte(initPacket InitialPacket, encodeLen bool) (he
 	}
 
 	// パケットのLengthを可変長整数でエンコードして返す
-	if encodeLen {
-		headerByte = append(headerByte, EncodeVariableInt(int(sumByteArr(initPacket.Length)))...)
-	} else {
-		headerByte = append(headerByte, initPacket.Length...)
-	}
-
+	//if encodeLen {
+	//	fmt.Printf("Init pakcet length is %x\n", initPacket.Length)
+	//	headerByte = append(headerByte, EncodeVariableInt(int(sumByteArr(initPacket.Length)))...)
+	//} else {
+	headerByte = append(headerByte, initPacket.Length...)
 	headerByte = append(headerByte, initPacket.PacketNumber...)
+
 	return headerByte
 }
 
-func (*HandshakePacket) ToHeaderByte(handshake HandshakePacket, encodeLen bool) (packet []byte) {
+func (*HandshakePacket) ToHeaderByte(handshake HandshakePacket) (packet []byte) {
 	packet = toByteArr(handshake.LongHeader)
-	if encodeLen {
-		packet = append(packet, EncodeVariableInt(int(sumByteArr(handshake.Length)))...)
-	} else {
-		packet = append(packet, handshake.Length...)
-	}
+	//if encodeLen {
+	//	packet = append(packet, EncodeVariableInt(int(sumByteArr(handshake.Length)))...)
+	//} else {
+
+	packet = append(packet, handshake.Length...)
 	packet = append(packet, handshake.PacketNumber...)
 
 	return packet
@@ -223,7 +154,7 @@ func (*InitialPacket) CreateInitialPacket(tlsinfo TLSInfo) (TLSInfo, []byte) {
 
 	initPacket = NewInitialPacket(tlsinfo.QPacketInfo)
 	// Padding Frame の長さ = 1252 - LongHeaderのLength - Crypto FrameのLength - 16(AEAD暗号化したときのOverhead)
-	paddingLength := 1252 - len(initPacket.ToHeaderByte(initPacket, false)) - len(cryptoByte) - 16
+	paddingLength := 1252 - len(initPacket.ToHeaderByte(initPacket)) - len(cryptoByte) - 16
 
 	initPacket.Payload = UnshiftPaddingFrame(cryptoByte, paddingLength)
 	// PayloadのLength + Packet番号のLength + AEADの認証タグ長=16
@@ -232,7 +163,7 @@ func (*InitialPacket) CreateInitialPacket(tlsinfo TLSInfo) (TLSInfo, []byte) {
 	initPacket.Length = EncodeVariableInt(length)
 
 	// ヘッダをByteにする
-	headerByte := initPacket.ToHeaderByte(initPacket, false)
+	headerByte := initPacket.ToHeaderByte(initPacket)
 	//fmt.Printf("header is %x\n", headerByte)
 
 	// PaddingとCrypto FrameのPayloadを暗号化する
@@ -256,7 +187,7 @@ func (*InitialPacket) CreateInitialAckPacket(tlsinfo TLSInfo) []byte {
 	ack := toByteArr(NewAckFrame(tlsinfo.QPacketInfo.AckCount))
 
 	// Padding Frame の長さ = 1252 - LongHeaderのLength - Crypto FrameのLength - 16
-	paddingLength := 1252 - len(initPacket.ToHeaderByte(initPacket, false)) - len(ack) - 16
+	paddingLength := 1252 - len(initPacket.ToHeaderByte(initPacket)) - len(ack) - 16
 	// PaddingしてPacket Sizeを増やす
 	initPacket.Payload = AppendPaddingFrame(ack, paddingLength)
 	// PayloadのLength + Packet番号のLength + AEADの認証タグ長=16
@@ -264,7 +195,7 @@ func (*InitialPacket) CreateInitialAckPacket(tlsinfo TLSInfo) []byte {
 	// 可変長整数のエンコードをしてLengthをセット
 	initPacket.Length = EncodeVariableInt(length)
 	// ヘッダをByteにする
-	headerByte := initPacket.ToHeaderByte(initPacket, false)
+	headerByte := initPacket.ToHeaderByte(initPacket)
 	// PaddingとACK FrameのPayloadを暗号化する
 	encpayload := EncryptClientPayload(initPacket.PacketNumber, headerByte, initPacket.Payload, tlsinfo.QuicKeyBlock)
 
@@ -293,7 +224,7 @@ func (*HandshakePacket) CreateHandshakePacket(tlsinfo TLSInfo) []byte {
 	// 可変長整数のエンコードをしてLengthをセット
 	handshake.Length = EncodeVariableInt(length)
 	// ヘッダをByteにする
-	headerByte := handshake.ToHeaderByte(handshake, false)
+	headerByte := handshake.ToHeaderByte(handshake)
 
 	clientkey := QuicKeyBlock{
 		ClientKey: tlsinfo.KeyBlockTLS13.ClientHandshakeKey,
@@ -312,52 +243,64 @@ func (*HandshakePacket) CreateHandshakePacket(tlsinfo TLSInfo) []byte {
 }
 
 // Inital packetを復号する。復号して結果をパースしてQuicパケットのframeにして返す。
-func (*InitialPacket) ToPlainQuicPacket(initPacket InitialPacket, rawPacket []byte, tlsinfo TLSInfo) (frames []interface{}) {
-	startPnumOffset := len(initPacket.ToHeaderByte(initPacket, false)) - 2
-
-	// ヘッダ保護を解除したInitial Packetにする
-	parsed := UnprotectHeader(startPnumOffset, rawPacket, tlsinfo.QuicKeyBlock.ServerHeaderProtection, true)
-	unpInit := parsed[0].Packet.(InitialPacket)
+func (*InitialPacket) ToPlainQuicPacket(initPacket InitialPacket, tlsinfo TLSInfo) []interface{} {
 
 	// Initial Packetのペイロードを復号
-	plain := DecryptQuicPayload(unpInit.PacketNumber, unpInit.ToHeaderByte(unpInit, true), unpInit.Payload, tlsinfo.QuicKeyBlock)
+	plain := DecryptQuicPayload(initPacket.PacketNumber, initPacket.ToHeaderByte(initPacket), initPacket.Payload, tlsinfo.QuicKeyBlock)
 
 	// 復号した結果をパースしてQuicパケットのFrameにして返す
 	return ParseQuicFrame(plain, tlsinfo.QPacketInfo.CryptoFrameOffset)
+
 }
 
 // Handshake packetを復号する。復号して結果をパースしてQuicパケットのframeにして返す。
-func (*HandshakePacket) ToPlainQuicPacket(handshake HandshakePacket, rawpacket []byte, tlsinfo TLSInfo) (frames []interface{}) {
-	startPnumOffset := len(handshake.ToHeaderByte(handshake, false)) - 2
-
-	// 鍵導出で生成したHandshake packet用のヘッダ保護キーでヘッダ保護を解除したパケットにする
-	parsed := UnprotectHeader(startPnumOffset, rawpacket, tlsinfo.KeyBlockTLS13.ServerHandshakeHPKey, true)
-	unpHandshake := parsed[0].Packet.(HandshakePacket)
+func (*HandshakePacket) ToPlainQuicPacket(handshake HandshakePacket, tlsinfo TLSInfo) (frames []interface{}) {
 
 	serverkey := QuicKeyBlock{
 		ServerKey: tlsinfo.KeyBlockTLS13.ServerHandshakeKey,
 		ServerIV:  tlsinfo.KeyBlockTLS13.ServerHandshakeIV,
 	}
 	// Handshake packetのpayloadを復号
-	plain := DecryptQuicPayload(unpHandshake.PacketNumber, unpHandshake.ToHeaderByte(unpHandshake, true), unpHandshake.Payload, serverkey)
+	plain := DecryptQuicPayload(handshake.PacketNumber, handshake.ToHeaderByte(handshake), handshake.Payload, serverkey)
 	// 復号した結果をパースしてQuicパケットのFrameにして返す
 	return ParseQuicFrame(plain, tlsinfo.QPacketInfo.CryptoFrameOffset)
 }
 
-func (*ShortHeader) ToPlainQuicPacket(short ShortHeader, rawpacket []byte, tlsinfo TLSInfo) (frames []interface{}) {
-	startPnumOffset := len(short.ToHeaderByte(short)) - 2
-
-	// 鍵導出で生成したHandshake packet用のヘッダ保護キーでヘッダ保護を解除したパケットにする
-	parsed := UnprotectHeader(startPnumOffset, rawpacket, tlsinfo.KeyBlockTLS13.ServerAppHPKey, false)
-	unpShort := parsed[0].Packet.(ShortHeader)
+func (*ShortHeader) ToPlainQuicPacket(short ShortHeader, tlsinfo TLSInfo) (frames []interface{}) {
 
 	serverkey := QuicKeyBlock{
 		ServerKey: tlsinfo.KeyBlockTLS13.ServerAppKey,
 		ServerIV:  tlsinfo.KeyBlockTLS13.ServerAppIV,
 	}
 
-	plain := DecryptQuicPayload(unpShort.PacketNumber, unpShort.ToHeaderByte(unpShort), unpShort.Payload, serverkey)
+	plain := DecryptQuicPayload(short.PacketNumber, short.ToHeaderByte(short), short.Payload, serverkey)
 
 	// 復号した結果をパースしてQuicパケットのFrameにして返す
 	return ParseQuicFrame(plain, 0)
+}
+
+func (*ShortHeader) CreateShortHeaderPacket(tlsinfo TLSInfo, payload []byte) []byte {
+	// Packet Number Lengthは2byteだから01000001
+	headerByte := []byte{0x41}
+	headerByte = append(headerByte, tlsinfo.QPacketInfo.DestinationConnID...)
+	pnumOffset := len(headerByte)
+
+	packetnum := UintTo2byte(uint16(tlsinfo.QPacketInfo.ShortHeaderPacketNumber))
+	headerByte = append(headerByte, packetnum...)
+
+	clientkey := QuicKeyBlock{
+		ClientKey: tlsinfo.KeyBlockTLS13.ClientAppKey,
+		ClientIV:  tlsinfo.KeyBlockTLS13.ClientAppIV,
+	}
+
+	// PaddingとACK FrameのPayloadを暗号化する
+	encpayload := EncryptClientPayload(packetnum, headerByte, payload, clientkey)
+	fmt.Printf("enc payload is %x\n", encpayload)
+	fmt.Printf("headerByte is %x\n", headerByte)
+	// 暗号化したPayloadをヘッダとくっつける
+	packet := headerByte
+	packet = append(packet, encpayload...)
+
+	// ヘッダ内のPacket Number Lengthの2bitとPacket Numberを暗号化する
+	return ProtectHeader(pnumOffset, packet, tlsinfo.KeyBlockTLS13.ClientAppHPKey, false)
 }

@@ -18,23 +18,25 @@ func main() {
 	var packet, retryInit []byte
 
 	tlsinfo.QPacketInfo = quic.QPacketInfo{
-		DestinationConnID:   quic.StrtoByte("7b268ba2b1ced2e48ed34a0a38"),
-		SourceConnID:        nil,
-		Token:               nil,
-		InitialPacketNumber: 0,
-		PacketNumberLength:  2,
-		CryptoFrameOffset:   0,
+		DestinationConnID:        quic.StrtoByte("7b268ba2b1ced2e48ed34a0a38"),
+		SourceConnID:             nil,
+		Token:                    nil,
+		InitialPacketNumber:      0,
+		ClientPacketNumberLength: 2,
+		CryptoFrameOffset:        0,
 	}
 
 	tlsinfo, packet = init.CreateInitialPacket(tlsinfo)
 
 	conn := quic.ConnectQuicServer(localAddr, port)
-	recv := quic.SendQuicPacket(conn, [][]byte{packet})
+	parsed, recvPacket := quic.SendQuicPacket(conn, [][]byte{packet}, tlsinfo)
+	if len(recvPacket) == 0 {
+		fmt.Println("all packet is parsed")
+	}
 
 	// Packet NumberをIncrementする
 	tlsinfo.QPacketInfo.InitialPacketNumber++
-
-	retryPacket := recv[0].Packet.(quic.RetryPacket)
+	retryPacket := parsed.Packet.(quic.RetryPacket)
 
 	// ServerからのRetryパケットのSource Connection IDをDestination Connection IDとしてInitial Packetを生成する
 	tlsinfo.QPacketInfo.DestinationConnID = retryPacket.LongHeader.SourceConnID
@@ -44,45 +46,52 @@ func main() {
 
 	// ここでInitial PacketでServerHelloが、Handshake PacketでCertificateの途中まで返ってくる
 	// recvhandshake[0]にInitial Packet(Server hello), [1]にHandshake Packet(Certificate~)
-	recvPacket := quic.SendQuicPacket(conn, [][]byte{retryInit})
+	parsed, recvPacket = quic.SendQuicPacket(conn, [][]byte{retryInit}, tlsinfo)
 
 	// Initial packet を処理する
-	recvInitPacket := recvPacket[0].Packet.(quic.InitialPacket)
-	// 送るときに使うので受信したSourceConnIDをDestination Connection IDにセットする
+	recvInitPacket := parsed.Packet.(quic.InitialPacket)
+	// Packetを復号化してFrameにパースする、[0]にはAck 、[1]にはCryptoが入る
+	qframes := recvInitPacket.ToPlainQuicPacket(recvInitPacket, tlsinfo)
+	//Retryに対してInitial Packetを送り返すときには受信したSourceConnIDをDestinationConnectionIDにセットする
 	tlsinfo.QPacketInfo.DestinationConnID = recvInitPacket.LongHeader.SourceConnID
-	// parseしたQuicパケットのFrames配列で[0]にACK, [1]にCRYPTO(ServerHello)が入る
-	qframes := recvInitPacket.ToPlainQuicPacket(recvInitPacket, recvPacket[0].RawPacket, tlsinfo)
 
 	var shello quic.ServerHello
 	tlsPackets, isfrag := quic.ParseTLSHandshake(qframes[1].(quic.CryptoFrame).Data)
 	if !isfrag {
 		shello = tlsPackets[0].(quic.ServerHello)
+		fmt.Printf("Server Hello is %+v\n", shello)
 	}
 	commonkey := quic.GenerateCommonKey(shello.TLSExtensions, tlsinfo.ECDHEKeys.PrivateKey)
 
-	// server hello を追加
+	// ServerHelloのパケットを追加
 	tlsinfo.HandshakeMessages = append(tlsinfo.HandshakeMessages, qframes[1].(quic.CryptoFrame).Data...)
 
 	// 鍵導出を実行
 	tlsinfo.KeyBlockTLS13 = quic.KeyscheduleToMasterSecret(commonkey, tlsinfo.HandshakeMessages)
 
 	// Handshake Packetを処理(Crypto Frame(ServerCertificateの途中まで)
-	handshake := recvPacket[1].Packet.(quic.HandshakePacket)
-	frames := handshake.ToPlainQuicPacket(handshake, recvPacket[1].RawPacket, tlsinfo)
-	tlsPackets, frag := quic.ParseTLSHandshake(frames[0].(quic.CryptoFrame).Data)
+	fmt.Printf("remain packet is %x\n", recvPacket)
+	parsed, recvPacket = quic.ParseRawQuicPacket(recvPacket, tlsinfo)
+	var handshake quic.HandshakePacket
+	if len(recvPacket) == 0 {
+		handshake = parsed.Packet.(quic.HandshakePacket)
+	}
 
-	var fragPacket []quic.ParsedQuicPacket
+	frames := handshake.ToPlainQuicPacket(handshake, tlsinfo)
+	tlsPackets, frag := quic.ParseTLSHandshake(frames[0].(quic.CryptoFrame).Data)
+	//
+	var fragPacket quic.ParsedQuicPacket
 	// パケットが途中で途切れてるなら次のパケットを読み込む
 	// packetがfragmentだった場合、Crypto FrameのOffsetが1つ前のCrypto FrameのLengthになる。というのもPayloadは前のCrypto Frameの続きであるから
 	if frag {
 		// [0]にTLSパケットの続き(Certificate, CertificateVerify, Finished)
 		// [1]にShort HeaderのNew Connection ID Frameが3つ
-		fragPacket = quic.ReadNextPacket(conn)
+		fragPacket, recvPacket = quic.ReadNextPacket(conn, tlsinfo)
 		tlsinfo.QPacketInfo.CryptoFrameOffset = quic.SumLengthByte(frames[0].(quic.CryptoFrame).Length)
 	}
 
-	fraghs := fragPacket[0].Packet.(quic.HandshakePacket)
-	fragedhsframe := fraghs.ToPlainQuicPacket(fraghs, fragPacket[0].RawPacket, tlsinfo)
+	fraghs := fragPacket.Packet.(quic.HandshakePacket)
+	fragedhsframe := fraghs.ToPlainQuicPacket(fraghs, tlsinfo)
 	// 1つ前のCrypto Frameの途中までのデータに続きのデータをくっつける
 	tlsCertificate := frames[0].(quic.CryptoFrame).Data
 	tlsCertificate = append(tlsCertificate, fragedhsframe[0].(quic.CryptoFrame).Data...)
@@ -97,104 +106,125 @@ func main() {
 	tlsinfo.HandshakeMessages = append(tlsinfo.HandshakeMessages, tlsCertificate...)
 	// Application用の鍵導出を行う
 	tlsinfo = quic.KeyscheduleToAppTraffic(tlsinfo)
+	tlsinfo.QPacketInfo.DestinationConnIDLength = fraghs.LongHeader.DestConnIDLength
 
-	unpshort := fragPacket[1].Packet.(quic.ShortHeader)
-	frames = unpshort.ToPlainQuicPacket(unpshort, fragPacket[1].RawPacket, tlsinfo)
-
-	fmt.Printf("new_connection_id is %+v\n", frames[0])
+	// 残りはShortHeader Packet
+	fmt.Printf("remain packet is %x\n", recvPacket)
+	parsed, recvPacket = quic.ParseRawQuicPacket(recvPacket, tlsinfo)
+	var short quic.ShortHeader
+	if len(recvPacket) == 0 {
+		fmt.Println("all packet is parsed")
+		short = parsed.Packet.(quic.ShortHeader)
+	}
+	frames = short.ToPlainQuicPacket(short, tlsinfo)
+	fmt.Printf("NewConnectionID is %+v\n", frames[0])
 
 	tlsinfo.QPacketInfo.InitialPacketNumber++
 	ack := init.CreateInitialAckPacket(tlsinfo)
 	var tlsfin quic.HandshakePacket
 	finpacket := tlsfin.CreateHandshakePacket(tlsinfo)
-	
-	recv = quic.SendQuicPacket(conn, [][]byte{ack, finpacket})
 
-	fmt.Printf("recv packet is %+v\n", recv[0])
+	// Finishedを送りHandshake_Doneを受信
+	parsed, recvPacket = quic.SendQuicPacket(conn, [][]byte{ack, finpacket}, tlsinfo)
+	// New Connection IDを受信
+	//rawnci := quic.ReadNextPacket(conn, tlsinfo)
 
+	fmt.Printf("recv packet is %x\n", recvPacket)
+	//fmt.Printf("recv rawnci packet is %+v\n", rawnci[0])
+
+	//var short quic.ShortHeader
+	shortByte := short.CreateShortHeaderPacket(tlsinfo, quic.NewControlStream())
+	tlsinfo.QPacketInfo.ShortHeaderPacketNumber++
+
+	parsed, recvPacket = quic.SendQuicPacket(conn, [][]byte{shortByte}, tlsinfo)
+	fmt.Printf("recv packet is %x\n", recvPacket)
+
+	//h3request := short.CreateShortHeaderPacket(tlsinfo, quic.NewHttp3Request())
+	//recv = quic.SendQuicPacket(conn, [][]byte{h3request}, tlsinfo)
+	//fmt.Printf("recv packet is %+v\n", recv[0])
 }
 
-func handshakePacket() {
-	destconnID := quic.StrtoByte("5306bcce")
-	// destination connection id からキーを生成する
-	keyblock := quic.CreateQuicInitialSecret(destconnID)
-
-	// local-quic-go.pacpng No.4のパケット
-	h := quic.StrtoByte("c70000000100044a4b30eb0040754e968ed438dd5ba1b6cafef2cb9c84ee9bc9efc838f64b7e4ac53396ff7aaa3fdc1fa2b94326d8141d41ffd5787f21f5f54e7a1c9ad9501d108463a6e272c7f1263aa23560a00a5ad5d41c0c79239f18a138a0bb8270e0d9dbd369f6ce1ce5f01d6176726a9046b539457f72df7081f0b27c01e275ef0000000100044a4b30eb44544cd3b74f603556b6c49d4a126b108397a9b59e8d3b7f1843bf9fb1a09ed68f2d858bb5c16149c6f37a938c589a9ed8ae9c4342de373fc48c97a3d37c9db6d7b59b7610e34628062b8c97efa6675e43e266650589d360b45cd05878c30955b7e08ac0b7b90e6eb2c356d8806ab1389748b710141b008f43969e31f72485257ab7c938d95f08d0315e3d8529855b5ffb32795f9c39da4180e54748669fe7939b2f17a1f3e53d8bb025ac4a99e4afda8ad45ea41eff53b2f73358e561545af1622412a29b71d51e3643a09579d417900f779861d1581b5aaddfa0b062bb8b1087121608f5ff055fe84c37a8d3f1648dcb96f01cb021a91d88e28283cbddc649658692f1598bf78146bdcfd2e20e61801b5616cac088f594cb92b0a5b1d567cf97f1bd7cfdeead4e2ca4da15a1bcf50bc032393a656cc5a1556be9bde6f00770c8329a530eef3a4c8327fde355a09c88759c889b40bc32c8301b911b2401478ea2b6ec05008c71b4b7a88f423b5672286c092dcc6dd66a530e46a99cd426567616aa9f5c7e96d0bdf638730c6e04d71836ea7820cbc1b52ff923238a0df00533b819b89f5f89b22c44f178cdaf6840908f5eb3cbe03778b6038f4ca689e9501174dc7cbe9db91afe08c604d931c20bcbde95e90225b49a4d95cc7ce60762e35ba9af851eac9cc17a181baaeea374c0ca9875f9b08880d84c0f2ae1cc98dc588eb282448777bda611b53e8ef6ca8350ea0a4dd7bf05ae1d31bb98b7c85660104b15a2970e9df891a0a89ba6846ec091a95d82a9e88defc5538bca59f47e1be59cbfd7bdeb03bca81bdc1b80f5104c66a7c1b6290e5893938e3f9345b8637a0d22e68d1527dff1af299e9d3faa40878dc1c9b829a7d367aa89250f6c9ca30f8fb3af171cb6a6ce1192df091ec31c5c778d28394a9e5821a64218b254129969a3baecd9a430e243aa20af50194bec23aecd5edcf3c9e719a6d7dd5a3b3fedb7ad5cbe40bce0d0d1457ae06242a282e39a41a19963f9140323c35458c3278a3d90c373a6ae95cb94a81ce2ce6295dee518390a856ba1bade91e8c0ce585509cce067eabb83863a70e534aa69dcebdfbdb3e6e50f1558df5a9992355598f19f66612cc6622c91e5f6e3e260fd06bfd4f0b96a0f700ee3d39c1610673d87df7d2efceb06d1e1128d98265f0055978485db145f320e8ecda45979a4c7553f6cfa84da7ddf1cf9c00a975ab747844dc25d5061a4fb7d317195ce76ffedb9a8e62d1401a12682796f622b72f17800bea5499aa628f6d0062ca8f82224732e79b72be159d150b9fdc05c56cd007a92ad21c524dc333436e9fb89a333524a76c9cf09dab065161e8c93e8a1e6830b4e1800562bfb93dcd0ae52f433be365f8bcc2ab3101ac37b0e618f532fee4a2edbf6013d2de13b0600fc246e1de872fdad123816dd8d8a0735d9a444c7d6a4699919eac9f0b21356e860e34078c781375cf1304a9337e21301186e5a73165c2a2df71749a817ee05618230d2742fe578e421a2369111c06c6a74f866302b40b9d1dd93dfe990a382f5b73c91f7")
-	// parsed[0]にInitial Packet(Server hello), [1]にHandshake Packet(Certificate~)
-	parsed := quic.ParseRawQuicPacket(h, true)
-	initPacket := parsed[0].Packet.(quic.InitialPacket)
-	startPnumOffset := len(initPacket.ToHeaderByte(initPacket, false)) - 2
-
-	unpInit := quic.UnprotectHeader(startPnumOffset, parsed[0].RawPacket, keyblock.ServerHeaderProtection, true)
-	init := unpInit[0].Packet.(quic.InitialPacket)
-
-	// Initial Packetを復号
-	plain := quic.DecryptQuicPayload(init.PacketNumber, init.ToHeaderByte(init, true), init.Payload, keyblock)
-	qframes := quic.ParseQuicFrame(plain, 0)
-
-	fmt.Printf("plain is %x\n", plain)
-
-	var shello quic.ServerHello
-	tlsPackets, isfrag := quic.ParseTLSHandshake(qframes[1].(quic.CryptoFrame).Data)
-	if !isfrag {
-		shello = tlsPackets[0].(quic.ServerHello)
-	}
-
-	fmt.Printf("server hello is %x\n", qframes[1].(quic.CryptoFrame).Data)
-
-	privateKey := quic.StrtoByte("0000000000000000000000000000000000000000000000000000000000000000")
-	commonkey := quic.GenerateCommonKey(shello.TLSExtensions, privateKey)
-
-	chello := quic.StrtoByte("0100013003030000000000000000000000000000000000000000000000000000000000000000000026c02bc02fc02cc030cca9cca8c009c013c00ac014009c009d002f0035c012000a130113021303010000e10000000e000c0000096c6f63616c686f7374000500050100000000000a000a0008001d001700180019000b00020100000d001a0018080404030807080508060401050106010503060302010203ff0100010000100014001211717569632d6563686f2d6578616d706c6500120000002b0003020304003300260024001d00202fe57da347cd62431528daac5fbb290730fff684afc4cfc2ed90995f58cb3b740039003e420b041fad788e0504800800000604800800000704800800000404800c00000802406409024064010480007530030245ac0b011a0c000e01040f00200100")
-
-	// server hello を追加
-	chello = append(chello, qframes[1].(quic.CryptoFrame).Data...)
-	// 鍵導出を実行
-	tls13Keyblock := quic.KeyscheduleToMasterSecret(commonkey, chello)
-
-	handshake := parsed[1].Packet.(quic.HandshakePacket)
-	startPnumOffset = len(handshake.ToHeaderByte(handshake, false)) - 2
-
-	unpPacket := quic.UnprotectHeader(startPnumOffset, parsed[1].RawPacket, tls13Keyblock.ServerHandshakeHPKey, true)
-	unpHandshake := unpPacket[0].Packet.(quic.HandshakePacket)
-	serverkey := quic.QuicKeyBlock{
-		ServerKey: tls13Keyblock.ServerHandshakeKey,
-		ServerIV:  tls13Keyblock.ServerHandshakeIV,
-	}
-
-	plain = quic.DecryptQuicPayload(unpHandshake.PacketNumber, unpHandshake.ToHeaderByte(unpHandshake, true), unpHandshake.Payload, serverkey)
-	frames := quic.ParseQuicFrame(plain, 0)
-
-	tlsPackets, frag := quic.ParseTLSHandshake(frames[0].(quic.CryptoFrame).Data)
-	fmt.Printf("isfrag %v\n", frag)
-
-	// frag が true なら recvをもう1回呼んで次のパケットを読み込む
-	// local-quic-go.pacpng No.5のパケット
-	recvfrag := quic.StrtoByte("ea0000000100044a4b30eb41c1184320f0b3f1c5af2bd489437dc37139b30c1c810134c8a5c82b6723a5d0f7482827a6bfb4d254f5d88fb12afc218b9004f62be63ac36f9dc93f10b4c1e85c0e563037d577975400db6d74db34f60668546ded459c501bf3194207ce227249dcbe31fa844cd397db5af58d63136d0ab9316279f833d8a2183beaa09469e6123383eb39c9f96be6c996704858bbc21b2e20ea7faca53cdfe6db656bb1bd7e37a11f05be31058dd5a0d4c980235ce4c8cc348ddad5beda4b8872368cf40acba55239195f9658ed950ed1b8bbe712313029a189b998b7c48c2d5e93a6759d9d6b3e7e9de6b5cc051b90c350b9675e084d584651c7f2d969aea292b770daa4a4e4ea34b70b0b57a5da0088d4f465087803ad5a94ac79c5e30a63156e77e7f93851591fc262e3c5439f379a56bb34e012ac3fc94c86177d9311e1a98a1fffd896de7bdfec06acf135f72d30896b07f9d4bc4e6b6ae9ebeee52aaa178e65f8d14f6003d0226a395ec6b6f8c69de5c0d3a61fccfbb0523c40504dd8058bdb125a6f317f802dc3fd0d1e7a5dececa9d1016db873ab2cc32ba218cca61210bd8977c512c91f676dcd07dc06a2a94376ffabc6774d9240d2f1e06f6ec8f551490318ff03cf925b1c83105391af6659528a0608870a0f71b8db45bf73fe653d0fa02f2cb1191f74891ad12255b75291c42f765b6c561c92af6f951ba68eaa0f7e5d74b5178636b1474c15a77bc254bb5123e06522f80a5ba611ab871bdaa6dc228d")
-	parsed = quic.ParseRawQuicPacket(recvfrag, true)
-	fragedhs := parsed[0].Packet.(quic.HandshakePacket)
-
-	startPnumOffset = len(fragedhs.ToHeaderByte(fragedhs, false)) - 2
-	unpParsed := quic.UnprotectHeader(startPnumOffset, parsed[0].RawPacket, tls13Keyblock.ServerHandshakeHPKey, true)
-	unpFraghs := unpParsed[0].Packet.(quic.HandshakePacket)
-
-	fragplain := quic.DecryptQuicPayload(unpFraghs.PacketNumber, unpFraghs.ToHeaderByte(unpFraghs, true), unpFraghs.Payload, serverkey)
-
-	fmt.Printf("frag plain is %x\n", fragplain)
-	frames = quic.ParseQuicFrame(fragplain, 0)
-	fmt.Printf("%x\n", frames[0].(quic.CryptoFrame).Data)
-
-	// TLS1.3の鍵導出をする
-
-	//short := parsed[1].Packet.(quic.QuicShortHeaderPacket)
-	//startPnumOffset = len(short.ToHeaderByte(short)) - 2
-	//unpParsed = quic.UnprotectHeader(startPnumOffset, parsed[1].RawPacket, tls13Keyblock.ServerHandshakeHPKey)
-	//unpshort := unpParsed[0].Packet.(quic.QuicShortHeaderPacket)
-	//
-	//fmt.Printf("short header byte is %x\n", unpshort.ToHeaderByte(unpshort))
-
-}
+//func handshakePacket() {
+//	destconnID := quic.StrtoByte("5306bcce")
+//	// destination connection id からキーを生成する
+//	keyblock := quic.CreateQuicInitialSecret(destconnID)
+//
+//	// local-quic-go.pacpng No.4のパケット
+//	h := quic.StrtoByte("c70000000100044a4b30eb0040754e968ed438dd5ba1b6cafef2cb9c84ee9bc9efc838f64b7e4ac53396ff7aaa3fdc1fa2b94326d8141d41ffd5787f21f5f54e7a1c9ad9501d108463a6e272c7f1263aa23560a00a5ad5d41c0c79239f18a138a0bb8270e0d9dbd369f6ce1ce5f01d6176726a9046b539457f72df7081f0b27c01e275ef0000000100044a4b30eb44544cd3b74f603556b6c49d4a126b108397a9b59e8d3b7f1843bf9fb1a09ed68f2d858bb5c16149c6f37a938c589a9ed8ae9c4342de373fc48c97a3d37c9db6d7b59b7610e34628062b8c97efa6675e43e266650589d360b45cd05878c30955b7e08ac0b7b90e6eb2c356d8806ab1389748b710141b008f43969e31f72485257ab7c938d95f08d0315e3d8529855b5ffb32795f9c39da4180e54748669fe7939b2f17a1f3e53d8bb025ac4a99e4afda8ad45ea41eff53b2f73358e561545af1622412a29b71d51e3643a09579d417900f779861d1581b5aaddfa0b062bb8b1087121608f5ff055fe84c37a8d3f1648dcb96f01cb021a91d88e28283cbddc649658692f1598bf78146bdcfd2e20e61801b5616cac088f594cb92b0a5b1d567cf97f1bd7cfdeead4e2ca4da15a1bcf50bc032393a656cc5a1556be9bde6f00770c8329a530eef3a4c8327fde355a09c88759c889b40bc32c8301b911b2401478ea2b6ec05008c71b4b7a88f423b5672286c092dcc6dd66a530e46a99cd426567616aa9f5c7e96d0bdf638730c6e04d71836ea7820cbc1b52ff923238a0df00533b819b89f5f89b22c44f178cdaf6840908f5eb3cbe03778b6038f4ca689e9501174dc7cbe9db91afe08c604d931c20bcbde95e90225b49a4d95cc7ce60762e35ba9af851eac9cc17a181baaeea374c0ca9875f9b08880d84c0f2ae1cc98dc588eb282448777bda611b53e8ef6ca8350ea0a4dd7bf05ae1d31bb98b7c85660104b15a2970e9df891a0a89ba6846ec091a95d82a9e88defc5538bca59f47e1be59cbfd7bdeb03bca81bdc1b80f5104c66a7c1b6290e5893938e3f9345b8637a0d22e68d1527dff1af299e9d3faa40878dc1c9b829a7d367aa89250f6c9ca30f8fb3af171cb6a6ce1192df091ec31c5c778d28394a9e5821a64218b254129969a3baecd9a430e243aa20af50194bec23aecd5edcf3c9e719a6d7dd5a3b3fedb7ad5cbe40bce0d0d1457ae06242a282e39a41a19963f9140323c35458c3278a3d90c373a6ae95cb94a81ce2ce6295dee518390a856ba1bade91e8c0ce585509cce067eabb83863a70e534aa69dcebdfbdb3e6e50f1558df5a9992355598f19f66612cc6622c91e5f6e3e260fd06bfd4f0b96a0f700ee3d39c1610673d87df7d2efceb06d1e1128d98265f0055978485db145f320e8ecda45979a4c7553f6cfa84da7ddf1cf9c00a975ab747844dc25d5061a4fb7d317195ce76ffedb9a8e62d1401a12682796f622b72f17800bea5499aa628f6d0062ca8f82224732e79b72be159d150b9fdc05c56cd007a92ad21c524dc333436e9fb89a333524a76c9cf09dab065161e8c93e8a1e6830b4e1800562bfb93dcd0ae52f433be365f8bcc2ab3101ac37b0e618f532fee4a2edbf6013d2de13b0600fc246e1de872fdad123816dd8d8a0735d9a444c7d6a4699919eac9f0b21356e860e34078c781375cf1304a9337e21301186e5a73165c2a2df71749a817ee05618230d2742fe578e421a2369111c06c6a74f866302b40b9d1dd93dfe990a382f5b73c91f7")
+//	// parsed[0]にInitial Packet(Server hello), [1]にHandshake Packet(Certificate~)
+//	parsed := quic.ParseRawQuicPacket(h, true)
+//	initPacket := parsed[0].Packet.(quic.InitialPacket)
+//	startPnumOffset := len(initPacket.ToHeaderByte(initPacket, false)) - 2
+//
+//	unpInit := quic.UnprotectHeader(startPnumOffset, parsed[0].RawPacket, keyblock.ServerHeaderProtection, true)
+//	init := unpInit[0].Packet.(quic.InitialPacket)
+//
+//	// Initial Packetを復号
+//	plain := quic.DecryptQuicPayload(init.PacketNumber, init.ToHeaderByte(init, true), init.Payload, keyblock)
+//	qframes := quic.ParseQuicFrame(plain, 0)
+//
+//	fmt.Printf("plain is %x\n", plain)
+//
+//	var shello quic.ServerHello
+//	tlsPackets, isfrag := quic.ParseTLSHandshake(qframes[1].(quic.CryptoFrame).Data)
+//	if !isfrag {
+//		shello = tlsPackets[0].(quic.ServerHello)
+//	}
+//
+//	fmt.Printf("server hello is %x\n", qframes[1].(quic.CryptoFrame).Data)
+//
+//	privateKey := quic.StrtoByte("0000000000000000000000000000000000000000000000000000000000000000")
+//	commonkey := quic.GenerateCommonKey(shello.TLSExtensions, privateKey)
+//
+//	chello := quic.StrtoByte("0100013003030000000000000000000000000000000000000000000000000000000000000000000026c02bc02fc02cc030cca9cca8c009c013c00ac014009c009d002f0035c012000a130113021303010000e10000000e000c0000096c6f63616c686f7374000500050100000000000a000a0008001d001700180019000b00020100000d001a0018080404030807080508060401050106010503060302010203ff0100010000100014001211717569632d6563686f2d6578616d706c6500120000002b0003020304003300260024001d00202fe57da347cd62431528daac5fbb290730fff684afc4cfc2ed90995f58cb3b740039003e420b041fad788e0504800800000604800800000704800800000404800c00000802406409024064010480007530030245ac0b011a0c000e01040f00200100")
+//
+//	// server hello を追加
+//	chello = append(chello, qframes[1].(quic.CryptoFrame).Data...)
+//	// 鍵導出を実行
+//	tls13Keyblock := quic.KeyscheduleToMasterSecret(commonkey, chello)
+//
+//	handshake := parsed[1].Packet.(quic.HandshakePacket)
+//	startPnumOffset = len(handshake.ToHeaderByte(handshake, false)) - 2
+//
+//	unpPacket := quic.UnprotectHeader(startPnumOffset, parsed[1].RawPacket, tls13Keyblock.ServerHandshakeHPKey, true)
+//	unpHandshake := unpPacket[0].Packet.(quic.HandshakePacket)
+//	serverkey := quic.QuicKeyBlock{
+//		ServerKey: tls13Keyblock.ServerHandshakeKey,
+//		ServerIV:  tls13Keyblock.ServerHandshakeIV,
+//	}
+//
+//	plain = quic.DecryptQuicPayload(unpHandshake.PacketNumber, unpHandshake.ToHeaderByte(unpHandshake, true), unpHandshake.Payload, serverkey)
+//	frames := quic.ParseQuicFrame(plain, 0)
+//
+//	tlsPackets, frag := quic.ParseTLSHandshake(frames[0].(quic.CryptoFrame).Data)
+//	fmt.Printf("isfrag %v\n", frag)
+//
+//	// frag が true なら recvをもう1回呼んで次のパケットを読み込む
+//	// local-quic-go.pacpng No.5のパケット
+//	recvfrag := quic.StrtoByte("ea0000000100044a4b30eb41c1184320f0b3f1c5af2bd489437dc37139b30c1c810134c8a5c82b6723a5d0f7482827a6bfb4d254f5d88fb12afc218b9004f62be63ac36f9dc93f10b4c1e85c0e563037d577975400db6d74db34f60668546ded459c501bf3194207ce227249dcbe31fa844cd397db5af58d63136d0ab9316279f833d8a2183beaa09469e6123383eb39c9f96be6c996704858bbc21b2e20ea7faca53cdfe6db656bb1bd7e37a11f05be31058dd5a0d4c980235ce4c8cc348ddad5beda4b8872368cf40acba55239195f9658ed950ed1b8bbe712313029a189b998b7c48c2d5e93a6759d9d6b3e7e9de6b5cc051b90c350b9675e084d584651c7f2d969aea292b770daa4a4e4ea34b70b0b57a5da0088d4f465087803ad5a94ac79c5e30a63156e77e7f93851591fc262e3c5439f379a56bb34e012ac3fc94c86177d9311e1a98a1fffd896de7bdfec06acf135f72d30896b07f9d4bc4e6b6ae9ebeee52aaa178e65f8d14f6003d0226a395ec6b6f8c69de5c0d3a61fccfbb0523c40504dd8058bdb125a6f317f802dc3fd0d1e7a5dececa9d1016db873ab2cc32ba218cca61210bd8977c512c91f676dcd07dc06a2a94376ffabc6774d9240d2f1e06f6ec8f551490318ff03cf925b1c83105391af6659528a0608870a0f71b8db45bf73fe653d0fa02f2cb1191f74891ad12255b75291c42f765b6c561c92af6f951ba68eaa0f7e5d74b5178636b1474c15a77bc254bb5123e06522f80a5ba611ab871bdaa6dc228d")
+//	parsed = quic.ParseRawQuicPacket(recvfrag, true)
+//	fragedhs := parsed[0].Packet.(quic.HandshakePacket)
+//
+//	startPnumOffset = len(fragedhs.ToHeaderByte(fragedhs, false)) - 2
+//	unpParsed := quic.UnprotectHeader(startPnumOffset, parsed[0].RawPacket, tls13Keyblock.ServerHandshakeHPKey, true)
+//	unpFraghs := unpParsed[0].Packet.(quic.HandshakePacket)
+//
+//	fragplain := quic.DecryptQuicPayload(unpFraghs.PacketNumber, unpFraghs.ToHeaderByte(unpFraghs, true), unpFraghs.Payload, serverkey)
+//
+//	fmt.Printf("frag plain is %x\n", fragplain)
+//	frames = quic.ParseQuicFrame(fragplain, 0)
+//	fmt.Printf("%x\n", frames[0].(quic.CryptoFrame).Data)
+//
+//	// TLS1.3の鍵導出をする
+//
+//	//short := parsed[1].Packet.(quic.QuicShortHeaderPacket)
+//	//startPnumOffset = len(short.ToHeaderByte(short)) - 2
+//	//unpParsed = quic.UnprotectHeader(startPnumOffset, parsed[1].RawPacket, tls13Keyblock.ServerHandshakeHPKey)
+//	//unpshort := unpParsed[0].Packet.(quic.QuicShortHeaderPacket)
+//	//
+//	//fmt.Printf("short header byte is %x\n", unpshort.ToHeaderByte(unpshort))
+//
+//}
 
 func _() {
 

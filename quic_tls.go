@@ -1,8 +1,8 @@
 package quic
 
 import (
+	"bytes"
 	"crypto/tls"
-	"encoding/binary"
 	"fmt"
 )
 
@@ -34,7 +34,7 @@ func NewQuicClientHello() (ecdheKey ECDHEKeys, clientHelloPacket []byte) {
 	}
 
 	// TLS1.3のextensionをセット
-	handshake.Extensions, ecdheKey = setQuicTLSExtension()
+	handshake.Extensions, ecdheKey = setQuicTLSExtension(true)
 	// Quic transport parameterを追加
 	handshake.Extensions = append(handshake.Extensions, setQuicTransportParameters()...)
 	// ExtensionLengthをセット
@@ -93,7 +93,7 @@ func setQuicTransportParameters() []byte {
 }
 
 // golangのclientのをキャプチャしてそのままセットする
-func setQuicTLSExtension() ([]byte, ECDHEKeys) {
+func setQuicTLSExtension(http3 bool) ([]byte, ECDHEKeys) {
 	var tlsExtension []byte
 
 	// server_name
@@ -120,13 +120,15 @@ func setQuicTLSExtension() ([]byte, ECDHEKeys) {
 	// renagotiation_info
 	tlsExtension = append(tlsExtension, []byte{0xff, 0x01, 0x00, 0x01, 0x00}...)
 
-	// Application Layer Protocol Negotiation
-	//tlsExtension = append(tlsExtension, []byte{0x00, 0x10, 0x00, 0x05, 0x00, 0x03, 0x02, 0x68, 0x33}...)
+	// Application Layer Protocol Negotiation for HTTP3
+	if http3 {
+		tlsExtension = append(tlsExtension, []byte{0x00, 0x10, 0x00, 0x05, 0x00, 0x03, 0x02, 0x68, 0x33}...)
+	}
 	// quic-echo-example
-	tlsExtension = append(tlsExtension, []byte{
-		0x00, 0x10, 0x00, 0x14, 0x00, 0x12, 0x11, 0x71,
-		0x75, 0x69, 0x63, 0x2d, 0x65, 0x63, 0x68, 0x6f,
-		0x2d, 0x65, 0x78, 0x61, 0x6d, 0x70, 0x6c, 0x65}...)
+	//tlsExtension = append(tlsExtension, []byte{
+	//	0x00, 0x10, 0x00, 0x14, 0x00, 0x12, 0x11, 0x71,
+	//	0x75, 0x69, 0x63, 0x2d, 0x65, 0x63, 0x68, 0x6f,
+	//	0x2d, 0x65, 0x78, 0x61, 0x6d, 0x70, 0x6c, 0x65}...)
 
 	// signed_certificate_timestamp
 	tlsExtension = append(tlsExtension, []byte{0x00, 0x12, 0x00, 0x00}...)
@@ -238,18 +240,31 @@ func ParseTLSHandshake(packet []byte) ([]interface{}, bool) {
 			packet = packet[4+sum3BytetoLength(finish.Length):]
 			i = 0
 		case HandshakeTypeNewSessionTicket:
-			ticketLength := binary.BigEndian.Uint16(packet[21:23]) + 23
+			//ticketLength := binary.BigEndian.Uint16(packet[21:23]) + 23
 			session := SessionTicket{
 				HandshakeType:     packet[0:1],
 				Length:            packet[1:4],
 				TicketLifeTime:    packet[4:8],
 				TicketAgeAdd:      packet[8:12],
 				TicketNonceLength: packet[12:13],
-				TicketNonce:       packet[13:21],
-				TicketLength:      packet[21:23],
-				Ticket:            packet[23:ticketLength],
-				TicketExtensions:  packet[ticketLength:],
 			}
+			offset := 13
+			if !bytes.Equal(session.TicketNonceLength, []byte{0x00}) {
+				session.TicketNonce = packet[offset : offset+int(sumByteArr(session.TicketNonceLength))]
+				offset += int(sumByteArr(session.TicketNonceLength))
+			}
+			// set Ticket Length
+			session.TicketLength = packet[offset : offset+2]
+			offset += 2
+			// set Ticket
+			session.Ticket = packet[offset : offset+int(sumByteArr(session.TicketLength))]
+			offset += int(sumByteArr(session.TicketLength))
+
+			// set Extensions
+			session.TicketExtensionLength = packet[offset : offset+2]
+			offset += 2
+			session.TicketExtensions = packet[offset:]
+
 			handshake = append(handshake, session)
 			// packetを縮める, TLSレコードヘッダの4byte+Length
 			packet = packet[4+sum3BytetoLength(session.Length):]

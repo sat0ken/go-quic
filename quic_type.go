@@ -113,6 +113,21 @@ type ParsedQuicPacket struct {
 	PacketType int
 }
 
+/*
+	17.2. Long Header Packets
+	Long Header Packet {
+	     Header Form (1) = 1,
+	     Fixed Bit (1) = 1,
+	     Long Packet Type (2),
+	     Type-Specific Bits (4),
+	     Version (32),
+	     Destination Connection ID Length (8),
+	     Destination Connection ID (0..160),
+	     Source Connection ID Length (8),
+	     Source Connection ID (0..160),
+	     Type-Specific Payload (..),
+	}
+*/
 type LongHeader struct {
 	HeaderByte         []byte
 	Version            []byte
@@ -122,6 +137,20 @@ type LongHeader struct {
 	SourceConnID       []byte
 }
 
+/*
+	17.3. Short Header Packets
+	1-RTT Packet {
+		Header Form (1) = 0,
+		Fixed Bit (1) = 1,
+		Spin Bit (1),
+		Reserved Bits (2),
+		Key Phase (1),
+		Packet Number Length (2),
+		Destination Connection ID (0..160),
+		Packet Number (8..32),
+		Packet Payload (8..),
+	}
+*/
 type ShortHeader struct {
 	HeaderByte   []byte
 	DestConnID   []byte
@@ -176,6 +205,16 @@ type NewConnectionIdFrame struct {
 	StatelessResetToken []byte
 }
 
+type HandshakeDoneFrame struct {
+	Type []byte
+}
+
+type NewTokenFrame struct {
+	Type        []byte
+	TokenLength []byte
+	Token       []byte
+}
+
 // 19.8. STREAM Frames
 type StreamFrame struct {
 	Type       []byte
@@ -186,13 +225,15 @@ type StreamFrame struct {
 }
 
 type QPacketInfo struct {
-	DestinationConnID      []byte
-	SourceConnID           []byte
-	Token                  []byte
-	InitialPacketNumber    int // Initialパケットのパケット番号
-	HandshakePacketNumber  int // Handshakeパケットのパケット番号
-	ShortHeaderPacketNmber int // 1RTTパケットのパケット番号
-	PacketNumberLength     int
-	CryptoFrameOffset      int
-	AckCount               int
+	DestinationConnIDLength  []byte
+	DestinationConnID        []byte
+	SourceConnID             []byte
+	Token                    []byte
+	InitialPacketNumber      int // Initialパケットのパケット番号
+	HandshakePacketNumber    int // Handshakeパケットのパケット番号
+	ShortHeaderPacketNumber  int // 1RTTパケットのパケット番号
+	ClientPacketNumberLength int
+	ServerPacketNumberLength int
+	CryptoFrameOffset        int
+	AckCount                 int
 }
