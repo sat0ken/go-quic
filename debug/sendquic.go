@@ -10,7 +10,7 @@ import (
 
 var localAddr = []byte{127, 0, 0, 1}
 
-const port = 18443
+const port = 10443
 
 func main() {
 	var tlsinfo quic.TLSInfo
@@ -126,22 +126,55 @@ func main() {
 
 	// Finishedを送りHandshake_Doneを受信
 	parsed, recvPacket = quic.SendQuicPacket(conn, [][]byte{ack, finpacket}, tlsinfo)
-	// New Connection IDを受信
-	//rawnci := quic.ReadNextPacket(conn, tlsinfo)
+	if len(recvPacket) == 0 {
+		fmt.Println("all packet is parsed")
+		tlsfin = parsed.Packet.(quic.HandshakePacket)
+	}
 
-	fmt.Printf("recv packet is %x\n", recvPacket)
+	fmt.Printf("recv parsed packet is %x\n", tlsfin)
 	//fmt.Printf("recv rawnci packet is %+v\n", rawnci[0])
 
 	//var short quic.ShortHeader
 	shortByte := short.CreateShortHeaderPacket(tlsinfo, quic.NewControlStream())
 	tlsinfo.QPacketInfo.ShortHeaderPacketNumber++
 
+	//
 	parsed, recvPacket = quic.SendQuicPacket(conn, [][]byte{shortByte}, tlsinfo)
-	fmt.Printf("recv packet is %x\n", recvPacket)
+	//fmt.Printf("recv http3 setting packet is %x\n", recvPacket)
+	if len(recvPacket) == 0 {
+		fmt.Println("all packet is parsed")
+		short = parsed.Packet.(quic.ShortHeader)
+	}
+	frames = short.ToPlainQuicPacket(short, tlsinfo)
+	for _, v := range frames {
+		fmt.Printf("frames is %+v\n", v)
+	}
 
-	//h3request := short.CreateShortHeaderPacket(tlsinfo, quic.NewHttp3Request())
-	//recv = quic.SendQuicPacket(conn, [][]byte{h3request}, tlsinfo)
-	//fmt.Printf("recv packet is %+v\n", recv[0])
+	h3request := short.CreateShortHeaderPacket(tlsinfo, quic.NewHttp3Request())
+	parsed, recvPacket = quic.SendQuicPacket(conn, [][]byte{h3request}, tlsinfo)
+	if len(recvPacket) == 0 {
+		fmt.Println("all packet is parsed")
+		short = parsed.Packet.(quic.ShortHeader)
+	}
+	frames = short.ToPlainQuicPacket(short, tlsinfo)
+	for _, v := range frames {
+		fmt.Printf("frames is %+v\n", v)
+	}
+
+	parsed, recvPacket = quic.ReadNextPacket(conn, tlsinfo)
+	if len(recvPacket) == 0 {
+		fmt.Println("all packet is parsed")
+		short = parsed.Packet.(quic.ShortHeader)
+	}
+	frames = short.ToPlainQuicPacket(short, tlsinfo)
+	for _, v := range frames {
+		fmt.Printf("HTTP3 Header frames is %+v\n", v)
+	}
+	stream := frames[1].(quic.StreamFrame)
+	fmt.Printf("frame %+v\n", stream)
+
+	h3data := quic.ParseHTTP3(stream.StreamData)
+	fmt.Printf("message from http3 server is %s\n", h3data[1].Payload)
 }
 
 //func handshakePacket() {

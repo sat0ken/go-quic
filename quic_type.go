@@ -7,6 +7,7 @@ const (
 	NewToken        = 0x07
 	HandShakeDone   = 0x1e
 	NewConnectionID = 0x18
+	Stream          = 0x09
 )
 
 const (

@@ -1,5 +1,16 @@
 package quic
 
+const (
+	HTTP3TypeData = iota
+	HTTP3TypeHeader
+)
+
+type HTTP3Frame struct {
+	Type    []byte
+	Length  []byte
+	Payload []byte
+}
+
 func NewControlStream() (data []byte) {
 	// Stream Type : Control Stream
 	data = []byte{0x00}
@@ -37,4 +48,33 @@ func NewHttp3Request() (data []byte) {
 	}
 
 	return toByteArr(stream)
+}
+
+func ParseHTTP3(packet []byte) (h3frame []HTTP3Frame) {
+	for i := 0; i < len(packet); i++ {
+		switch packet[0] {
+		case HTTP3TypeHeader:
+			frame := HTTP3Frame{
+				Type:   packet[0:1],
+				Length: packet[1:2],
+			}
+			frame.Payload = packet[2 : 2+int(frame.Length[0])]
+			h3frame = append(h3frame, frame)
+
+			// 次のフレームを読み込む
+			packet = packet[2+int(frame.Length[0]):]
+			i = 0
+		case HTTP3TypeData:
+			frame := HTTP3Frame{
+				Type:   packet[0:1],
+				Length: packet[1:2],
+			}
+			frame.Payload = packet[2 : 2+int(frame.Length[0])]
+			h3frame = append(h3frame, frame)
+			// 次のフレームを読み込む
+			packet = packet[2+int(frame.Length[0]):]
+			i = 0
+		}
+	}
+	return h3frame
 }

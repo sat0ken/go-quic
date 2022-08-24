@@ -525,6 +525,16 @@ func ParseQuicFrame(packet []byte, offset int) (frame []interface{}) {
 			// 次のパケットを読み進める
 			packet = packet[3+tokenLength:]
 			i = 0
+		case Stream:
+			stream := StreamFrame{
+				Type:       packet[0:1],
+				StreamID:   packet[1:2],
+				StreamData: packet[2:],
+			}
+			frame = append(frame, stream)
+			// 次のパケットを読み進める
+			packet = packet[len(packet):]
+			i = 0
 		}
 	}
 	return frame

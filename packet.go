@@ -274,7 +274,7 @@ func (*ShortHeader) ToPlainQuicPacket(short ShortHeader, tlsinfo TLSInfo) (frame
 	}
 
 	plain := DecryptQuicPayload(short.PacketNumber, short.ToHeaderByte(short), short.Payload, serverkey)
-
+	fmt.Printf("Decrypt plain message is %x\n", plain)
 	// 復号した結果をパースしてQuicパケットのFrameにして返す
 	return ParseQuicFrame(plain, 0)
 }

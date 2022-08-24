@@ -7,12 +7,23 @@ import (
 )
 
 func main() {
+	p := quic.StrtoByte("0201240001090001030000d9000e48656c6c6f20487474703321210a")
+	frame := quic.ParseQuicFrame(p, 0)
+
+	stream := frame[1].(quic.StreamFrame)
+	fmt.Printf("frame %+v\n", stream)
+
+	h3data := quic.ParseHTTP3(stream.StreamData)
+	fmt.Printf("frame %s\n", h3data[1].Payload)
+
+}
+
+func _() {
 	donetokencrypto := quic.StrtoByte("1e07404a2978ecd70c1e8f43c7ca9dc761f7fc5655ab76a197624013c4f6c08e703fb954359b06ef89050fe26cdfe06da7bba88d0d72734add57df1c4bf532e82a502e31f620185fd3e8480161920600409c0400009800093a8000000000000083b7c152e121f5da3cd63e2fba7aa53abf0000000000000000000000000000000039a907d3339fba9b9870b9bec1fbcc9088811c4771cc73b619312874029edfcc3c2baeda0f918d09c12335dc38b6d8ce0a68c34c695602a38676bb7a11611e1442d4233e57ffa1f81244d77cb4b1bef2c24b32d06a8eb7b8917eb944d97c90a51f8e030008002a0004ffffffff")
 	frames := quic.ParseQuicFrame(donetokencrypto, 0)
 
 	for _, v := range frames {
 		fmt.Printf("frames is %+v\n", v)
-
 	}
 
 	tlsTicket := quic.StrtoByte("0400009800093a8000000000000083b7c152e121f5da3cd63e2fba7aa53abf0000000000000000000000000000000039a907d3339fba9b9870b9bec1fbcc9088811c4771cc73b619312874029edfcc3c2baeda0f918d09c12335dc38b6d8ce0a68c34c695602a38676bb7a11611e1442d4233e57ffa1f81244d77cb4b1bef2c24b32d06a8eb7b8917eb944d97c90a51f8e030008002a0004ffffffff")
