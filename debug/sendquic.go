@@ -10,7 +10,7 @@ import (
 
 var localAddr = []byte{127, 0, 0, 1}
 
-const port = 10443
+const port = 18443
 
 func main() {
 	var tlsinfo quic.TLSInfo

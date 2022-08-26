@@ -67,7 +67,7 @@ func createLongHeader(qinfo QPacketInfo, ptype int) (longHeader LongHeader, pack
 }
 
 // Inital Packetのヘッダを生成する
-func NewInitialPacket(qinfo QPacketInfo) (initPacket InitialPacket) {
+func NewInitialPacketHeader(qinfo QPacketInfo) (initPacket InitialPacket) {
 
 	initPacket.LongHeader, initPacket.PacketNumber = createLongHeader(qinfo, LongHeaderPacketTypeInitial)
 	// トークンをセット
@@ -152,10 +152,9 @@ func (*InitialPacket) CreateInitialPacket(tlsinfo TLSInfo) (TLSInfo, []byte) {
 	// set quic keyblock
 	tlsinfo.QuicKeyBlock = keyblock
 
-	initPacket = NewInitialPacket(tlsinfo.QPacketInfo)
+	initPacket = NewInitialPacketHeader(tlsinfo.QPacketInfo)
 	// Padding Frame の長さ = 1252 - LongHeaderのLength - Crypto FrameのLength - 16(AEAD暗号化したときのOverhead)
 	paddingLength := 1252 - len(initPacket.ToHeaderByte(initPacket)) - len(cryptoByte) - 16
-
 	initPacket.Payload = UnshiftPaddingFrame(cryptoByte, paddingLength)
 	// PayloadのLength + Packet番号のLength + AEADの認証タグ長=16
 	length := len(initPacket.Payload) + len(initPacket.PacketNumber) + 16
@@ -164,8 +163,6 @@ func (*InitialPacket) CreateInitialPacket(tlsinfo TLSInfo) (TLSInfo, []byte) {
 
 	// ヘッダをByteにする
 	headerByte := initPacket.ToHeaderByte(initPacket)
-	//fmt.Printf("header is %x\n", headerByte)
-
 	// PaddingとCrypto FrameのPayloadを暗号化する
 	encpayload := EncryptClientPayload(initPacket.PacketNumber, headerByte, initPacket.Payload, keyblock)
 
@@ -182,7 +179,7 @@ func (*InitialPacket) CreateInitialPacket(tlsinfo TLSInfo) (TLSInfo, []byte) {
 func (*InitialPacket) CreateInitialAckPacket(tlsinfo TLSInfo) []byte {
 
 	//tlsinfo.QPacketInfo.DestinationConnID = strtoByte("4a4b30eb")
-	initPacket := NewInitialPacket(tlsinfo.QPacketInfo)
+	initPacket := NewInitialPacketHeader(tlsinfo.QPacketInfo)
 	// ACK Frameを作成
 	ack := toByteArr(NewAckFrame(tlsinfo.QPacketInfo.AckCount))
 

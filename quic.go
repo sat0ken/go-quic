@@ -146,11 +146,6 @@ func ParseLongHeaderPacket(packet []byte, ptype int, protect bool, pnumLen int) 
 		long.DestConnID = packet[6 : 6+int(long.DestConnIDLength[0])]
 		offset += int(long.DestConnIDLength[0])
 	}
-	//} else {
-	//	long.DestConnID = packet[6:7]
-	//	//offset++
-	//}
-	//fmt.Printf("offset is %d, offset byte is %x\n", offset, packet[offset:offset+1])
 	long.SourceConnIDLength = packet[offset : offset+1]
 	offset++
 	// Source Connection Lengthが0じゃないならセット
@@ -158,10 +153,6 @@ func ParseLongHeaderPacket(packet []byte, ptype int, protect bool, pnumLen int) 
 		long.SourceConnID = packet[offset : offset+int(long.SourceConnIDLength[0])]
 		offset += int(long.SourceConnIDLength[0])
 	}
-	//else {
-	//	long.SourceConnID = packet[offset : offset+1]
-	//	offset++
-	//}
 
 	//Source Connection ID まではLongHeader Typeの各パケットタイプ共通
 	switch ptype {
@@ -550,7 +541,6 @@ func DecodeVariableInt(plength []int) []byte {
 	for i := 0; i < length-1; i++ {
 		v = (v << 8) + plength[1]
 	}
-	//fmt.Printf("%x %d\n", v, v)
 	return UintTo2byte(uint16(v))
 }
 
