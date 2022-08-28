@@ -52,7 +52,7 @@ func main() {
 	recvInitPacket := parsed.Packet.(quic.InitialPacket)
 	// Packetを復号化してFrameにパースする、[0]にはAck 、[1]にはCryptoが入る
 	qframes := recvInitPacket.ToPlainQuicPacket(recvInitPacket, tlsinfo)
-	//Retryに対してInitial Packetを送り返すときには受信したSourceConnIDをDestinationConnectionIDにセットする
+	//Initial Packetを送り返すときには受信したSourceConnIDをDestinationConnectionIDにセットする
 	tlsinfo.QPacketInfo.DestinationConnID = recvInitPacket.LongHeader.SourceConnID
 
 	var shello quic.ServerHello
@@ -79,7 +79,7 @@ func main() {
 
 	frames := handshake.ToPlainQuicPacket(handshake, tlsinfo)
 	tlsPackets, frag := quic.ParseTLSHandshake(frames[0].(quic.CryptoFrame).Data)
-	//
+
 	var fragPacket quic.ParsedQuicPacket
 	// パケットが途中で途切れてるなら次のパケットを読み込む
 	// packetがfragmentだった場合、Crypto FrameのOffsetが1つ前のCrypto FrameのLengthになる。というのもPayloadは前のCrypto Frameの続きであるから

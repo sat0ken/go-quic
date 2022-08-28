@@ -213,8 +213,8 @@ func CreateHttp3Header(name, value string) (headerByte []byte) {
 		// +-------------------------------+
 
 		index := getHttp3HeaderIndexByName(name)
-		fmt.Printf("index is %d\n", index)
 		headerIndex, _ := strconv.ParseUint(fmt.Sprintf("01%06b", index+1), 2, 8)
+		fmt.Printf("index is %d, byte is %x\n", index, headerIndex)
 
 		// Huffman codingを意味する1のbitとcodingされたLengthを意味する7bit
 		encodeVal := HuffmanEncode(value)
@@ -225,6 +225,33 @@ func CreateHttp3Header(name, value string) (headerByte []byte) {
 		headerByte = append(headerByte, encodeVal...)
 
 	}
+
+	return headerByte
+}
+
+func NewHttp3Header(name, value string) (headerByte []byte) {
+
+	/*
+		0   1   2   3   4   5   6   7
+		+---+---+---+---+---+---+---+---+
+		| 0 | 1 | N | T |Name Index (4+)|
+		+---+---+---+---+---------------+
+		| H |     Value Length (7+)     |
+		+---+---------------------------+
+		|  Value String (Length bytes)  |
+		+-------------------------------+
+	*/
+
+	index := getHttp3HeaderIndexByValue(name)
+	// Name Indexの前の先頭4bitは0101で固定
+	headerIndex, _ := strconv.ParseUint(fmt.Sprintf("0101%04b", index), 2, 8)
+	// 文字列をHuffuman Encodeする
+	encodeVal := HuffmanEncode(value)
+	headerVal, _ := strconv.ParseUint(fmt.Sprintf("1%07b", len(encodeVal)), 2, 8)
+
+	headerByte = append(headerByte, byte(headerIndex))
+	headerByte = append(headerByte, byte(headerVal))
+	headerByte = append(headerByte, encodeVal...)
 
 	return headerByte
 }

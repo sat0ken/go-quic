@@ -7,15 +7,14 @@ import (
 )
 
 func main() {
-	p := quic.StrtoByte("0201240001090001030000d9000e48656c6c6f20487474703321210a")
-	frame := quic.ParseQuicFrame(p, 0)
+	b := quic.NewHttp3Header(":method", "localhost:18443")
+	fmt.Printf("header is %x\n", b)
 
-	stream := frame[1].(quic.StreamFrame)
-	fmt.Printf("frame %+v\n", stream)
+	b = quic.NewHttp3Header(":method", "quic-go HTTP/3")
+	fmt.Printf("header is %x\n", b)
 
-	h3data := quic.ParseHTTP3(stream.StreamData)
-	fmt.Printf("frame %s\n", h3data[1].Payload)
-
+	b = quic.NewHttp3Header(":status", "204")
+	fmt.Printf("header is %x\n", b)
 }
 
 func _() {
@@ -242,7 +241,7 @@ func createshort() {
 //}
 
 // test http3 header
-func _() {
+func header() {
 	p := quic.StrtoByte("0000508ba0e41d139d09b8179a699fd1c1d75f10839bd9ab5f508bed6988b4c7531efdfad867")
 	//p := quic.StrtoByte("568ba0e41d139d09b8179a699f")
 	//p := quic.StrtoByte("0000508b089d5c0b8170dc081a699fd1c1d75f10839bd9ab5f508bed6988b4c7531efdfad867")

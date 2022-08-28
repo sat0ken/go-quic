@@ -247,7 +247,6 @@ func (*InitialPacket) ToPlainQuicPacket(initPacket InitialPacket, tlsinfo TLSInf
 
 	// 復号した結果をパースしてQuicパケットのFrameにして返す
 	return ParseQuicFrame(plain, tlsinfo.QPacketInfo.CryptoFrameOffset)
-
 }
 
 // Handshake packetを復号する。復号して結果をパースしてQuicパケットのframeにして返す。

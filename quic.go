@@ -324,7 +324,6 @@ func UnprotectHeader(pnOffset int, packet, hpkey []byte, isLongHeader bool, tlsi
 	for i, _ := range a {
 		packet[pnOffset+i] = a[i]
 	}
-
 	fmt.Printf("unprotected packet is %x\n", packet)
 
 	return packet, tlsinfo
