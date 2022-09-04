@@ -12,9 +12,9 @@ type HTTP3Frame struct {
 }
 
 func NewControlStream() (data []byte) {
-	// Stream Type : Control Stream
+	// Stream Type : HTTP3 Control Stream
 	data = []byte{0x00}
-	// Type : Settings
+	// Type : HTTP3 Settings
 	data = append(data, 0x04)
 	// set Length
 	data = append(data, 0x00)
@@ -31,7 +31,6 @@ func NewControlStream() (data []byte) {
 
 func NewHttp3Request() (data []byte) {
 	// Stream Type : Control Stream
-	//header := strtoByte("0000508b089d5c0b8170dc081a699fd1c1d75f10839bd9ab5f508bed6988b4c7531efdfad867")
 	header := CreateHTTP3HeaderByteArray()
 	// Type : Header
 	data = append(data, 0x01)

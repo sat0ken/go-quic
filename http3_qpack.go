@@ -187,7 +187,16 @@ func getHttp3HeaderIndexByNameAndValue(name, value string) (index int, staticval
 func NewHttp3Header(name, value string) (headerByte []byte) {
 
 	index, staticval := getHttp3HeaderIndexByNameAndValue(name, value)
-	if !staticval {
+	if staticval {
+		/*
+		     0   1   2   3   4   5   6   7
+		   +---+---+---+---+---+---+---+---+
+		   | 1 | T |      Index (6+)       |
+		   +---+---+-----------------------+
+		*/
+		headerVal, _ := strconv.ParseUint(fmt.Sprintf("11%06b", index), 2, 8)
+		headerByte = append(headerByte, byte(headerVal))
+	} else {
 		/*
 			0   1   2   3   4   5   6   7
 			+---+---+---+---+---+---+---+---+
@@ -219,15 +228,6 @@ func NewHttp3Header(name, value string) (headerByte []byte) {
 
 		headerByte = append(headerByte, byte(headerVal))
 		headerByte = append(headerByte, encodeVal...)
-	} else {
-		/*
-		     0   1   2   3   4   5   6   7
-		   +---+---+---+---+---+---+---+---+
-		   | 1 | T |      Index (6+)       |
-		   +---+---+-----------------------+
-		*/
-		headerVal, _ := strconv.ParseUint(fmt.Sprintf("11%06b", index), 2, 8)
-		headerByte = append(headerByte, byte(headerVal))
 	}
 
 	fmt.Printf("Name is %s, Values is %s, byte is %x\n", name, value, headerByte)

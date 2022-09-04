@@ -233,32 +233,3 @@ func createshort() {
 //	fmt.Printf("short header packet is %x\n", short.CreateShortHeaderPacket(tlsinfo, payload))
 //
 //}
-
-// test http3 header
-func header() {
-	p := quic.StrtoByte("0000508ba0e41d139d09b8179a699fd1c1d75f10839bd9ab5f508bed6988b4c7531efdfad867")
-	//p := quic.StrtoByte("568ba0e41d139d09b8179a699f")
-	//p := quic.StrtoByte("0000508b089d5c0b8170dc081a699fd1c1d75f10839bd9ab5f508bed6988b4c7531efdfad867")
-	//p := quic.StrtoByte("0000508798e79a82ae43d3d1c1d75f10839bd9ab5f508bed6988b4c7531efdfad867")
-	headers := quic.DecodeHttp3Header(p)
-
-	for _, v := range headers {
-		fmt.Printf("Header Name is %s, Value is %s\n", v.Name, v.Value)
-	}
-
-	header := quic.NewHttp3Header(":method", "localhost:18443")
-	header = append(header, quic.NewHttp3Header("access-control-request-headers", "content-type")...)
-	//header = append(header, quic.CreateHttp3Header(":status", "204")...)
-	//header = append(header, quic.CreateHttp3Header("early-data", "1")...)
-	//header = append(header, quic.CreateHttp3Header("age", "0")...)
-	//header = append(header, quic.CreateHttp3Header("forwarded", "")...)
-	//header = append(header, quic.CreateHttp3Header("content-encoding", "br")...)
-	//header = append(header, quic.CreateHttp3Header(":method", "quic-go HTTP/3")...)
-
-	fmt.Printf("header OK %x\n", p)
-	fmt.Printf("header OK 0000%x\n", header)
-
-	fmt.Printf("huffman is %s\n", quic.HuffmanDecode(quic.StrtoByte("a0e41d139d09b8179a699f")))
-	fmt.Printf("huffman is %x\n", quic.HuffmanEncode("localhost:18443"))
-
-}
