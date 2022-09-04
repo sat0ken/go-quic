@@ -43,7 +43,7 @@ var Http3StaticTable = []Http3Header{
 	{Name: ":status", Value: "503"},
 	{Name: "accept", Value: "*/*"},
 	{Name: "accept", Value: "application/dns-message"},
-	{Name: "accept-encoding	", Value: "gzip, deflate, br"},
+	{Name: "accept-encoding", Value: "gzip, deflate, br"},
 	{Name: "accept-ranges", Value: "bytes"},
 	{Name: "access-control-allow-headers", Value: "cache-control"},
 	{Name: "access-control-allow-headers", Value: "content-type"},
@@ -119,13 +119,14 @@ func DecodeHttp3Header(headerByte []byte) []Http3Header {
 
 	for i := 0; i < len(headerByte); i++ {
 		binstr := fmt.Sprintf("%08b", headerByte[i])
-		//fmt.Printf("i is %d, binstr is %s\n", i, binstr)
 		if strings.HasPrefix(binstr, "1") {
+			fmt.Printf("i is %d, byte is %x, binstr is %s\n", i, headerByte[i], binstr)
 			// インデックスヘッダフィールド表現(1で始まる)
 			// 残り7bitを10進数にする
 			d, _ := strconv.ParseInt(binstr[1:], 2, 8)
 			http3Header = append(http3Header, Http3StaticTable[d-1])
 		} else if strings.HasPrefix(binstr, "01") {
+			fmt.Printf("i is %d, byte is %x, binstr is %s\n", i, headerByte[i], binstr)
 			var header Http3Header
 			// インデックス更新を伴うリテラルヘッダフィールド（01で始まる）
 			// Httpヘッダ名をIndex番号で取得
@@ -169,89 +170,66 @@ func DecodeHttp3Header(headerByte []byte) []Http3Header {
 	return http3Header
 }
 
-func getHttp3HeaderIndexByValue(value string) (index int) {
+func getHttp3HeaderIndexByNameAndValue(name, value string) (index int, staticval bool) {
 	for k, v := range Http3StaticTable {
-		if v.Value == value {
+		if v.Name == name && v.Value == value {
 			index = k
-		}
-	}
-	return index
-}
-
-func getHttp3HeaderIndexByName(name string) (index int) {
-	for k, v := range Http3StaticTable {
-		if v.Name == name {
-			index = k
+			staticval = true
 			break
+		} else if v.Name == name && v.Value != value {
+			index = k
+			staticval = false
 		}
 	}
-	return index
-}
-
-func CreateHttp3Header(name, value string) (headerByte []byte) {
-
-	if name == "" {
-		// インデックスヘッダフィールド表現(1で始まる)
-		// 0   1   2   3   4   5   6   7
-		// +---+---+---+---+---+---+---+---+
-		// | 1 |        Index (7+)         |
-		// +---+---------------------------+
-
-		index := getHttp3HeaderIndexByValue(value)
-		headerIndex, _ := strconv.ParseUint(fmt.Sprintf("1%07b", index+1), 2, 8)
-		headerByte = append(headerByte, byte(headerIndex))
-
-	} else {
-		// インデックス更新を伴うリテラルヘッダフィールド（01で始まる）
-		// 0   1   2   3   4   5   6   7
-		// +---+---+---+---+---+---+---+---+
-		// | 0 | 1 |      Index (6+)       |
-		// +---+---+-----------------------+
-		// | H |     Value Length (7+)     |
-		// +---+---------------------------+
-		// | Value String (Length octets)  |
-		// +-------------------------------+
-
-		index := getHttp3HeaderIndexByName(name)
-		headerIndex, _ := strconv.ParseUint(fmt.Sprintf("01%06b", index+1), 2, 8)
-		fmt.Printf("index is %d, byte is %x\n", index, headerIndex)
-
-		// Huffman codingを意味する1のbitとcodingされたLengthを意味する7bit
-		encodeVal := HuffmanEncode(value)
-		headerVal, _ := strconv.ParseUint(fmt.Sprintf("1%07b", len(encodeVal)), 2, 8)
-
-		headerByte = append(headerByte, byte(headerIndex))
-		headerByte = append(headerByte, byte(headerVal))
-		headerByte = append(headerByte, encodeVal...)
-
-	}
-
-	return headerByte
+	return index, staticval
 }
 
 func NewHttp3Header(name, value string) (headerByte []byte) {
 
-	/*
-		0   1   2   3   4   5   6   7
-		+---+---+---+---+---+---+---+---+
-		| 0 | 1 | N | T |Name Index (4+)|
-		+---+---+---+---+---------------+
-		| H |     Value Length (7+)     |
-		+---+---------------------------+
-		|  Value String (Length bytes)  |
-		+-------------------------------+
-	*/
+	index, staticval := getHttp3HeaderIndexByNameAndValue(name, value)
+	if !staticval {
+		/*
+			0   1   2   3   4   5   6   7
+			+---+---+---+---+---+---+---+---+
+			| 0 | 1 | N | T |Name Index (4+)|
+			+---+---+---+---+---------------+
+			| H |     Value Length (7+)     |
+			+---+---------------------------+
+			|  Value String (Length bytes)  |
+			+-------------------------------+
+		*/
+		var headerIndex uint64
+		// 15以下なら
+		if index <= 15 {
+			// Name Indexの前の先頭4bitは0101で固定
+			headerIndex, _ = strconv.ParseUint(fmt.Sprintf("0101%04b", index), 2, 8)
+			headerByte = append(headerByte, byte(headerIndex))
+		} else {
+			// Name Indexの前の先頭4bitは0101で固定
+			headerIndex, _ = strconv.ParseUint(fmt.Sprintf("0101%04b", 15), 2, 8)
+			index -= 15
+			headerByte = append(headerByte, byte(headerIndex))
+			headerIndex, _ = strconv.ParseUint(fmt.Sprintf("%08b", index), 2, 8)
+			headerByte = append(headerByte, byte(headerIndex))
+		}
 
-	index := getHttp3HeaderIndexByValue(name)
-	// Name Indexの前の先頭4bitは0101で固定
-	headerIndex, _ := strconv.ParseUint(fmt.Sprintf("0101%04b", index), 2, 8)
-	// 文字列をHuffuman Encodeする
-	encodeVal := HuffmanEncode(value)
-	headerVal, _ := strconv.ParseUint(fmt.Sprintf("1%07b", len(encodeVal)), 2, 8)
+		// 文字列をHuffuman Encodeする
+		encodeVal := HuffmanEncode(value)
+		headerVal, _ := strconv.ParseUint(fmt.Sprintf("1%07b", len(encodeVal)), 2, 8)
 
-	headerByte = append(headerByte, byte(headerIndex))
-	headerByte = append(headerByte, byte(headerVal))
-	headerByte = append(headerByte, encodeVal...)
+		headerByte = append(headerByte, byte(headerVal))
+		headerByte = append(headerByte, encodeVal...)
+	} else {
+		/*
+		     0   1   2   3   4   5   6   7
+		   +---+---+---+---+---+---+---+---+
+		   | 1 | T |      Index (6+)       |
+		   +---+---+-----------------------+
+		*/
+		headerVal, _ := strconv.ParseUint(fmt.Sprintf("11%06b", index), 2, 8)
+		headerByte = append(headerByte, byte(headerVal))
+	}
 
+	fmt.Printf("Name is %s, Values is %s, byte is %x\n", name, value, headerByte)
 	return headerByte
 }

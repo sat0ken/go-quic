@@ -7,14 +7,8 @@ import (
 )
 
 func main() {
-	b := quic.NewHttp3Header(":method", "localhost:18443")
-	fmt.Printf("header is %x\n", b)
-
-	b = quic.NewHttp3Header(":method", "quic-go HTTP/3")
-	fmt.Printf("header is %x\n", b)
-
-	b = quic.NewHttp3Header(":status", "204")
-	fmt.Printf("header is %x\n", b)
+	header := quic.CreateHTTP3HeaderByteArray()
+	fmt.Printf("header is %x\n", header[2:])
 }
 
 func _() {
@@ -252,8 +246,8 @@ func header() {
 		fmt.Printf("Header Name is %s, Value is %s\n", v.Name, v.Value)
 	}
 
-	header := quic.CreateHttp3Header(":method", "localhost:18443")
-	header = append(header, quic.CreateHttp3Header("access-control-request-headers", "content-type")...)
+	header := quic.NewHttp3Header(":method", "localhost:18443")
+	header = append(header, quic.NewHttp3Header("access-control-request-headers", "content-type")...)
 	//header = append(header, quic.CreateHttp3Header(":status", "204")...)
 	//header = append(header, quic.CreateHttp3Header("early-data", "1")...)
 	//header = append(header, quic.CreateHttp3Header("age", "0")...)

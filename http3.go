@@ -32,7 +32,7 @@ func NewControlStream() (data []byte) {
 func NewHttp3Request() (data []byte) {
 	// Stream Type : Control Stream
 	//header := strtoByte("0000508b089d5c0b8170dc081a699fd1c1d75f10839bd9ab5f508bed6988b4c7531efdfad867")
-	header := createHTTP3HeaderByteArray()
+	header := CreateHTTP3HeaderByteArray()
 	// Type : Header
 	data = append(data, 0x01)
 	// set Length
@@ -80,18 +80,15 @@ func ParseHTTP3(packet []byte) (h3frame []HTTP3Frame) {
 	return h3frame
 }
 
-func createHTTP3HeaderByteArray() []byte {
+func CreateHTTP3HeaderByteArray() []byte {
 	header := []byte{0x00, 0x00}
 
-	header = append(header, CreateHttp3Header(":method", "localhost:18443")...)
-	header = append(header, CreateHttp3Header("access-control-request-headers", "content-type")...)
-	header = append(header, CreateHttp3Header(":status", "204")...)
-	header = append(header, CreateHttp3Header("early-data", "1")...)
-	header = append(header, CreateHttp3Header("age", "0")...)
-	header = append(header, CreateHttp3Header(":status", "304")...)
-	header = append(header, CreateHttp3Header("forwarded", "")...)
-	header = append(header, CreateHttp3Header("content-encoding", "br")...)
-	header = append(header, CreateHttp3Header(":method", "quic-go HTTP/3")...)
+	header = append(header, NewHttp3Header(":authority", "127.0.0.1:18443")...)
+	header = append(header, NewHttp3Header(":method", "GET")...)
+	header = append(header, NewHttp3Header(":path", "/")...)
+	header = append(header, NewHttp3Header(":scheme", "https")...)
+	header = append(header, NewHttp3Header("accept-encoding", "gzip")...)
+	header = append(header, NewHttp3Header("user-agent", "quic-go HTTP/3")...)
 
 	return header
 }
